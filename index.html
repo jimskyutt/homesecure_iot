@@ -1,158 +1,451 @@
-<!-- index.html -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Servo Control</title>
+    <title>ESP32 Servo Control</title>
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Bootstrap Icons -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
     <style>
         body {
-            font-family: Arial, sans-serif;
-            max-width: 600px;
-            margin: 0 auto;
-            padding: 20px;
-            text-align: center;
+            background-color: #f8f9fa;
+            padding: 20px 0;
+            min-height: 100vh;
         }
-        .control-panel {
-            margin-top: 50px;
-            padding: 30px;
-            border-radius: 10px;
-            background-color: #f5f5f5;
-            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
-        }
-        .btn {
-            padding: 12px 30px;
-            margin: 10px;
-            font-size: 16px;
+        .card {
             border: none;
-            border-radius: 5px;
-            cursor: pointer;
-            transition: all 0.3s;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
         }
-        #btnOn {
-            background-color: #4CAF50;
-            color: white;
+        .card-header {
+            border-radius: 10px 10px 0 0 !important;
+            background: linear-gradient(135deg, #0d6efd, #0b5ed7);
         }
-        #btnOff {
-            background-color: #f44336;
-            color: white;
+        .status-indicator {
+            width: 15px;
+            height: 15px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 8px;
         }
-        .btn:hover {
-            opacity: 0.9;
-            transform: scale(1.05);
+        .status-connected {
+            background-color: #28a745;
+            box-shadow: 0 0 10px #28a745;
         }
-        .status {
-            margin: 20px 0;
-            font-size: 18px;
-            font-weight: bold;
+        .status-disconnected {
+            background-color: #dc3545;
         }
-        .input-group {
-            margin: 20px 0;
+        .status-connecting {
+            background-color: #ffc107;
+            animation: pulse 1.5s infinite;
         }
-        input[type="text"] {
-            padding: 10px;
-            width: 200px;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            margin-right: 10px;
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+        .command-history {
+            max-height: 300px;
+            overflow-y: auto;
+            scrollbar-width: thin;
+        }
+        .btn-lg {
+            min-width: 120px;
+        }
+        .form-control:focus {
+            border-color: #86b7fe;
+            box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+        }
+        .toast {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 1000;
         }
     </style>
 </head>
 <body>
-    <div class="control-panel">
-        <h1>Servo Motor Control</h1>
-        <div class="input-group">
-            <input type="text" id="esp32IP" placeholder="Enter ESP32 IP Address">
-            <button id="btnConnect" class="btn">Connect</button>
-        </div>
-        <div class="status" id="status">Satatus: Disconnected</div>
-        <div>
-            <button id="btnOn" class="btn" disabled>Turn ON</button>
-            <button id="btnOff" class="btn" disabled>Turn OFF</button>
+    <div class="container">
+        <div class="row justify-content-center">
+            <div class="col-md-8 col-lg-6">
+                <div class="card">
+                    <div class="card-header text-white">
+                        <h2 class="h4 mb-0"><i class="bi bi-cpu"></i> ESP32 Servo Control</h2>
+                    </div>
+                    <div class="card-body">
+                        <!-- Connection Section -->
+                        <div class="mb-4">
+                            <label for="ipInput" class="form-label">ESP32 IP Address</label>
+                            <div class="input-group mb-3">
+                                <span class="input-group-text"><i class="bi bi-ip"></i></span>
+                                <input type="text" class="form-control" id="ipInput" 
+                                       placeholder="192.168.1.100" value="192.168.8.170">
+                                <button class="btn btn-primary" type="button" id="btnConnect">
+                                    <span class="spinner-border spinner-border-sm d-none" id="connectSpinner"></span>
+                                    <span id="connectText">Connect</span>
+                                </button>
+                            </div>
+                            <div class="d-flex align-items-center mb-3">
+                                <span class="status-indicator" id="statusIndicator"></span>
+                                <span id="statusText">Status: Disconnected</span>
+                            </div>
+                        </div>
+
+                        <!-- Control Buttons -->
+                        <div class="text-center mb-4">
+                            <button class="btn btn-success btn-lg me-2" id="btnOn" disabled>
+                                <i class="bi bi-power"></i> Turn ON
+                            </button>
+                            <button class="btn btn-danger btn-lg" id="btnOff" disabled>
+                                <i class="bi bi-power-off"></i> Turn OFF
+                            </button>
+                        </div>
+
+                        <!-- Command History -->
+                        <div class="mt-4">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <h5 class="mb-0"><i class="bi bi-clock-history"></i> Command History</h5>
+                                <button class="btn btn-sm btn-outline-secondary" id="btnRefreshHistory">
+                                    <i class="bi bi-arrow-clockwise"></i> Refresh
+                                </button>
+                            </div>
+                            <div class="card command-history">
+                                <ul class="list-group list-group-flush" id="commandHistory">
+                                    <li class="list-group-item text-muted text-center py-4">Loading history...</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card-footer text-muted small">
+                        <div class="d-flex justify-content-between">
+                            <span>Last updated: <span id="lastUpdated">Just now</span></span>
+                            <span>v1.0.0</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 
-    <script>
-        const btnOn = document.getElementById('btnOn');
-        const btnOff = document.getElementById('btnOff');
-        const btnConnect = document.getElementById('btnConnect');
-        const statusDiv = document.getElementById('status');
-        const esp32IP = document.getElementById('esp32IP');
-        let socket = null;
+    <!-- Toast Notifications -->
+    <div class="toast align-items-center text-white bg-success border-0" role="alert" id="toastSuccess">
+        <div class="d-flex">
+            <div class="toast-body">
+                <i class="bi bi-check-circle me-2"></i>
+                <span id="toastSuccessMessage">Operation successful</span>
+            </div>
+            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+        </div>
+    </div>
 
-        function updateUI(connected) {
-            btnOn.disabled = !connected;
-            btnOff.disabled = !connected;
-            statusDiv.textContent = `Status: ${connected ? 'Connected' : 'Disconnected'}`;
-            statusDiv.style.color = connected ? '#4CAF50' : '#f44336';
+    <!-- Bootstrap JS Bundle with Popper -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- Supabase JS -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script id="supabase-script" src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+<script>
+    // Global variables
+    let supabase;
+    let socket = null;
+    let isConnected = false;
+
+    // Initialize Supabase
+function initSupabase() {
+        // Check if supabase is available
+        if (typeof supabase === 'undefined') {
+            console.error('Supabase not loaded yet');
+            return null;
+        }
+        
+        const SUPABASE_URL = 'https://cfmizvheukraeksdelpv.supabase.co';
+        const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNmbWl6dmhldWtyYWVrc2RlbHB2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjUwMjcyMjIsImV4cCI6MjA4MDYwMzIyMn0.JuYOGS94SfItvYYiv76iiBj9AdOH9ZJnZAa6G7tF9fs';
+        return window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    }
+
+    // DOM Elements
+    const elements = {
+        ipInput: document.getElementById('ipInput'),
+        btnConnect: document.getElementById('btnConnect'),
+        btnOn: document.getElementById('btnOn'),
+        btnOff: document.getElementById('btnOff'),
+        btnRefresh: document.getElementById('btnRefreshHistory'),
+        statusIndicator: document.getElementById('statusIndicator'),
+        statusText: document.getElementById('statusText'),
+        commandHistory: document.getElementById('commandHistory'),
+        connectSpinner: document.getElementById('connectSpinner'),
+        connectText: document.getElementById('connectText'),
+        lastUpdated: document.getElementById('lastUpdated')
+    };
+
+    // Show toast notification
+    function showToast(message, type = 'success') {
+        const toast = document.getElementById(`toast${type.charAt(0).toUpperCase() + type.slice(1)}`);
+        const toastMessage = toast.querySelector('.toast-body span');
+        toastMessage.textContent = message;
+        
+        const toastBootstrap = bootstrap.Toast.getOrCreateInstance(toast);
+        toast.className = `toast align-items-center text-white border-0 bg-${type}`;
+        toastBootstrap.show();
+    }
+
+    // Update last updated time
+    function updateLastUpdated() {
+        elements.lastUpdated.textContent = new Date().toLocaleTimeString();
+    }
+
+    // Save command to Supabase
+    async function saveCommand(command) {
+        try {
+            const { data, error } = await supabase
+                .from('commands')
+                .insert([{ 
+                    command,
+                    device: 'servo',
+                    user_agent: navigator.userAgent 
+                }])
+                .select();
+            
+            if (error) throw error;
+            return data?.[0];
+        } catch (error) {
+            console.error('Error saving command:', error);
+            showToast('Failed to save command', 'danger');
+            return null;
+        }
+    }
+
+    // Load command history from Supabase
+    async function loadCommandHistory() {
+        try {
+            elements.commandHistory.innerHTML = '<li class="list-group-item text-muted text-center py-4">Loading history...</li>';
+            
+            const { data, error } = await supabase
+                .from('commands')
+                .select('*')
+                .order('created_at', { ascending: false })
+                .limit(10);
+            
+            if (error) throw error;
+            
+            if (data.length === 0) {
+                elements.commandHistory.innerHTML = '<li class="list-group-item text-muted text-center py-4">No commands yet</li>';
+                return;
+            }
+            
+            elements.commandHistory.innerHTML = '';
+            data.forEach(cmd => {
+                addCommandToUI(cmd.command, new Date(cmd.created_at));
+            });
+            
+            updateLastUpdated();
+            showToast('History updated', 'success');
+        } catch (error) {
+            console.error('Error loading history:', error);
+            elements.commandHistory.innerHTML = 
+                '<li class="list-group-item text-danger text-center py-4">Failed to load history</li>';
+        }
+    }
+
+    // Add command to UI
+    function addCommandToUI(command, timestamp) {
+        if (elements.commandHistory.firstChild?.textContent === 'No commands yet' || 
+            elements.commandHistory.firstChild?.textContent === 'Loading history...') {
+            elements.commandHistory.innerHTML = '';
+        }
+        
+        const li = document.createElement('li');
+        li.className = 'list-group-item d-flex justify-content-between align-items-center';
+        
+        const isOn = command === '1' || command.toLowerCase() === 'on';
+        const iconClass = isOn ? 'bi-power text-success' : 'bi-power-off text-danger';
+        const commandText = isOn ? 'ON' : 'OFF';
+        
+        li.innerHTML = `
+            <div class="d-flex align-items-center">
+                <i class="bi ${iconClass} me-2"></i>
+                <span>Command: <strong>${commandText}</strong></span>
+            </div>
+            <small class="text-muted">${timestamp.toLocaleString()}</small>
+        `;
+        
+        elements.commandHistory.prepend(li);
+        
+        if (elements.commandHistory.children.length > 10) {
+            elements.commandHistory.removeChild(elements.commandHistory.lastChild);
+        }
+    }
+
+    // Update UI state
+    function updateUI(connected) {
+        isConnected = connected;
+        
+        if (connected) {
+            elements.connectText.textContent = 'Disconnect';
+            elements.btnConnect.classList.remove('btn-primary');
+            elements.btnConnect.classList.add('btn-danger');
+            elements.statusIndicator.className = 'status-indicator status-connected';
+            elements.statusText.textContent = 'Status: Connected';
+            showToast('Connected to ESP32', 'success');
+        } else {
+            elements.connectText.textContent = 'Connect';
+            elements.btnConnect.classList.remove('btn-danger');
+            elements.btnConnect.classList.add('btn-primary');
+            elements.statusIndicator.className = 'status-indicator status-disconnected';
+            elements.statusText.textContent = 'Status: Disconnected';
+        }
+        
+        elements.btnOn.disabled = !connected;
+        elements.btnOff.disabled = !connected;
+        elements.connectSpinner.classList.add('d-none');
+    }
+
+    // Send command to ESP32 and save to Supabase
+    async function sendCommand(command) {
+        if (!isConnected || !socket || socket.readyState !== WebSocket.OPEN) {
+            showToast('Not connected to ESP32', 'warning');
+            return;
         }
 
-        function connectToESP32() {
-    const ip = esp32IP.value.trim();
-    if (!ip) {
-        alert('Please enter ESP32 IP address');
-        return;
-    }
-
-    // Close existing connection if any
-    if (socket) {
-        socket.close();
-    }
-
-    // Create new WebSocket connection with protocol detection
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${protocol}//${ip}:81/`;
-    socket = new WebSocket(wsUrl);
-
-    socket.onopen = function() {
-        updateUI(true);
-        // Save the IP to localStorage for convenience
-        localStorage.setItem('lastESP32IP', ip);
-    };
-
-    socket.onclose = function() {
-        updateUI(false);
-        // Try to reconnect after 2 seconds
-        setTimeout(connectToESP32, 2000);
-    };
-
-    socket.onerror = function(error) {
-        console.error('WebSocket Error:', error);
-        statusDiv.textContent = 'Status: Connection Error';
-        statusDiv.style.color = '#f44336';
-    };
-}
-
-        // Load last used IP if available
-        window.onload = function() {
-            const lastIP = localStorage.getItem('lastESP32IP');
-            if (lastIP) {
-                esp32IP.value = lastIP;
+        try {
+            socket.send(command);
+            const savedCommand = await saveCommand(command);
+            if (savedCommand) {
+                addCommandToUI(command, new Date(savedCommand.created_at));
+                updateLastUpdated();
             }
+        } catch (error) {
+            console.error('Error sending command:', error);
+            showToast('Failed to send command', 'danger');
+        }
+    }
 
-            // Button event listeners
-            btnConnect.addEventListener('click', connectToESP32);
+    // Connect to WebSocket
+    function connect() {
+        if (socket) {
+            socket.close();
+            return;
+        }
+
+        const ip = elements.ipInput.value.trim();
+        if (!ip) {
+            showToast('Please enter ESP32 IP address', 'warning');
+            return;
+        }
+
+        const wsUrl = `ws://${ip}:81/`;
+        console.log('Connecting to:', wsUrl);
+        
+        try {
+            elements.statusText.textContent = 'Status: Connecting...';
+            elements.statusIndicator.className = 'status-indicator status-connecting';
+            elements.connectSpinner.classList.remove('d-none');
+            elements.connectText.textContent = 'Connecting...';
+            elements.btnConnect.disabled = true;
             
-            btnOn.addEventListener('click', function() {
-                if (socket && socket.readyState === WebSocket.OPEN) {
-                    socket.send('1');
+            socket = new WebSocket(wsUrl);
+
+            socket.onopen = () => {
+                console.log('WebSocket connected');
+                updateUI(true);
+                saveCommand('CONNECTED');
+                loadCommandHistory();
+            };
+
+            socket.onclose = () => {
+                console.log('WebSocket disconnected');
+                updateUI(false);
+                socket = null;
+                showToast('Disconnected from ESP32', 'info');
+            };
+
+            socket.onerror = (error) => {
+                console.error('WebSocket error:', error);
+                elements.statusText.textContent = 'Status: Connection Failed';
+                elements.statusIndicator.className = 'status-indicator status-disconnected';
+                showToast('Connection failed', 'danger');
+                elements.connectSpinner.classList.add('d-none');
+                elements.connectText.textContent = 'Connect';
+                elements.btnConnect.disabled = false;
+            };
+
+            socket.onmessage = (event) => {
+                console.log('Received:', event.data);
+            };
+
+        } catch (error) {
+            console.error('Error creating WebSocket:', error);
+            elements.statusText.textContent = `Error: ${error.message}`;
+            elements.statusIndicator.className = 'status-indicator status-disconnected';
+            showToast(`Error: ${error.message}`, 'danger');
+            elements.connectSpinner.classList.add('d-none');
+            elements.connectText.textContent = 'Connect';
+            elements.btnConnect.disabled = false;
+        }
+    }
+
+    // Initialize the application
+    function init() {
+        // Initialize Supabase
+        supabase = initSupabase();
+        if (!supabase) {
+            console.error('Failed to initialize Supabase');
+            showToast('Failed to initialize database connection', 'danger');
+            // Try to reinitialize after a delay
+            setTimeout(init, 1000);
+            return;
+        }
+        // Event Listeners
+        elements.btnConnect.addEventListener('click', connect);
+        elements.btnOn.addEventListener('click', () => sendCommand('1'));
+        elements.btnOff.addEventListener('click', () => sendCommand('0'));
+        elements.btnRefresh.addEventListener('click', loadCommandHistory);
+        
+        // Handle Enter key in IP input
+        elements.ipInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter' && !elements.btnConnect.disabled) {
+                connect();
+            }
+        });
+
+        // Initial setup
+        updateUI(false);
+        
+        // Load initial command history
+        loadCommandHistory().catch(console.error);
+
+        // Set up real-time subscription for command updates
+        const subscription = supabase
+            .channel('commands')
+            .on('postgres_changes', 
+                { 
+                    event: 'INSERT', 
+                    schema: 'public', 
+                    table: 'commands' 
+                },
+                (payload) => {
+                    console.log('New command received:', payload.new);
+                    addCommandToUI(
+                        payload.new.command, 
+                        new Date(payload.new.created_at)
+                    );
+                    updateLastUpdated();
                 }
+            )
+            .subscribe((status) => {
+                console.log('Supabase subscription status:', status);
             });
 
-            btnOff.addEventListener('click', function() {
-                if (socket && socket.readyState === WebSocket.OPEN) {
-                    socket.send('0');
-                }
-            });
+        // Show welcome message
+        setTimeout(() => {
+            showToast('Welcome to ESP32 Servo Control', 'info');
+        }, 1000);
+    }
 
-            // Handle Enter key in IP input
-            esp32IP.addEventListener('keypress', function(e) {
-                if (e.key === 'Enter') {
-                    connectToESP32();
-                }
-            });
-        };
-    </script>
+    // Start the application when the DOM is fully loaded
+    document.addEventListener('DOMContentLoaded', init);
+</script>
 </body>
 </html>
-
