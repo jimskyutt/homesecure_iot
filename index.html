@@ -88,38 +88,40 @@
         }
 
         function connectToESP32() {
-            const ip = esp32IP.value.trim();
-            if (!ip) {
-                alert('Please enter ESP32 IP address');
-                return;
-            }
+    const ip = esp32IP.value.trim();
+    if (!ip) {
+        alert('Please enter ESP32 IP address');
+        return;
+    }
 
-            // Close existing connection if any
-            if (socket) {
-                socket.close();
-            }
+    // Close existing connection if any
+    if (socket) {
+        socket.close();
+    }
 
-            // Create new WebSocket connection
-            socket = new WebSocket(`ws://${ip}:81/`);
+    // Create new WebSocket connection with protocol detection
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsUrl = `${protocol}//${ip}:81/`;
+    socket = new WebSocket(wsUrl);
 
-            socket.onopen = function() {
-                updateUI(true);
-                // Save the IP to localStorage for convenience
-                localStorage.setItem('lastESP32IP', ip);
-            };
+    socket.onopen = function() {
+        updateUI(true);
+        // Save the IP to localStorage for convenience
+        localStorage.setItem('lastESP32IP', ip);
+    };
 
-            socket.onclose = function() {
-                updateUI(false);
-                // Try to reconnect after 2 seconds
-                setTimeout(connectToESP32, 2000);
-            };
+    socket.onclose = function() {
+        updateUI(false);
+        // Try to reconnect after 2 seconds
+        setTimeout(connectToESP32, 2000);
+    };
 
-            socket.onerror = function(error) {
-                console.error('WebSocket Error:', error);
-                statusDiv.textContent = 'Status: Connection Error';
-                statusDiv.style.color = '#f44336';
-            };
-        }
+    socket.onerror = function(error) {
+        console.error('WebSocket Error:', error);
+        statusDiv.textContent = 'Status: Connection Error';
+        statusDiv.style.color = '#f44336';
+    };
+}
 
         // Load last used IP if available
         window.onload = function() {
