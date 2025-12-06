@@ -1,0 +1,155 @@
+<!-- index.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Servo Control</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            text-align: center;
+        }
+        .control-panel {
+            margin-top: 50px;
+            padding: 30px;
+            border-radius: 10px;
+            background-color: #f5f5f5;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        .btn {
+            padding: 12px 30px;
+            margin: 10px;
+            font-size: 16px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        #btnOn {
+            background-color: #4CAF50;
+            color: white;
+        }
+        #btnOff {
+            background-color: #f44336;
+            color: white;
+        }
+        .btn:hover {
+            opacity: 0.9;
+            transform: scale(1.05);
+        }
+        .status {
+            margin: 20px 0;
+            font-size: 18px;
+            font-weight: bold;
+        }
+        .input-group {
+            margin: 20px 0;
+        }
+        input[type="text"] {
+            padding: 10px;
+            width: 200px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            margin-right: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="control-panel">
+        <h1>Servo Motor Control</h1>
+        <div class="input-group">
+            <input type="text" id="esp32IP" placeholder="Enter ESP32 IP Address">
+            <button id="btnConnect" class="btn">Connect</button>
+        </div>
+        <div class="status" id="status">Status: Disconnected</div>
+        <div>
+            <button id="btnOn" class="btn" disabled>Turn ON</button>
+            <button id="btnOff" class="btn" disabled>Turn OFF</button>
+        </div>
+    </div>
+
+    <script>
+        const btnOn = document.getElementById('btnOn');
+        const btnOff = document.getElementById('btnOff');
+        const btnConnect = document.getElementById('btnConnect');
+        const statusDiv = document.getElementById('status');
+        const esp32IP = document.getElementById('esp32IP');
+        let socket = null;
+
+        function updateUI(connected) {
+            btnOn.disabled = !connected;
+            btnOff.disabled = !connected;
+            statusDiv.textContent = `Status: ${connected ? 'Connected' : 'Disconnected'}`;
+            statusDiv.style.color = connected ? '#4CAF50' : '#f44336';
+        }
+
+        function connectToESP32() {
+            const ip = esp32IP.value.trim();
+            if (!ip) {
+                alert('Please enter ESP32 IP address');
+                return;
+            }
+
+            // Close existing connection if any
+            if (socket) {
+                socket.close();
+            }
+
+            // Create new WebSocket connection
+            socket = new WebSocket(`ws://${ip}:81/`);
+
+            socket.onopen = function() {
+                updateUI(true);
+                // Save the IP to localStorage for convenience
+                localStorage.setItem('lastESP32IP', ip);
+            };
+
+            socket.onclose = function() {
+                updateUI(false);
+                // Try to reconnect after 2 seconds
+                setTimeout(connectToESP32, 2000);
+            };
+
+            socket.onerror = function(error) {
+                console.error('WebSocket Error:', error);
+                statusDiv.textContent = 'Status: Connection Error';
+                statusDiv.style.color = '#f44336';
+            };
+        }
+
+        // Load last used IP if available
+        window.onload = function() {
+            const lastIP = localStorage.getItem('lastESP32IP');
+            if (lastIP) {
+                esp32IP.value = lastIP;
+            }
+
+            // Button event listeners
+            btnConnect.addEventListener('click', connectToESP32);
+            
+            btnOn.addEventListener('click', function() {
+                if (socket && socket.readyState === WebSocket.OPEN) {
+                    socket.send('1');
+                }
+            });
+
+            btnOff.addEventListener('click', function() {
+                if (socket && socket.readyState === WebSocket.OPEN) {
+                    socket.send('0');
+                }
+            });
+
+            // Handle Enter key in IP input
+            esp32IP.addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') {
+                    connectToESP32();
+                }
+            });
+        };
+    </script>
+</body>
+</html>
