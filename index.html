@@ -3,25 +3,18 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ESP32 Servo Control</title>
-    <!-- Bootstrap CSS -->
+    <title>ESP32 Control Panel</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <!-- Bootstrap Icons -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
     <style>
         body {
             background-color: #f8f9fa;
             padding: 20px 0;
-            min-height: 100vh;
         }
         .card {
             border: none;
             border-radius: 10px;
             box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-        }
-        .card-header {
-            border-radius: 10px 10px 0 0 !important;
-            background: linear-gradient(135deg, #0d6efd, #0b5ed7);
         }
         .status-indicator {
             width: 15px;
@@ -32,7 +25,6 @@
         }
         .status-connected {
             background-color: #28a745;
-            box-shadow: 0 0 10px #28a745;
         }
         .status-disconnected {
             background-color: #dc3545;
@@ -47,22 +39,8 @@
             100% { opacity: 1; }
         }
         .command-history {
-            max-height: 300px;
+            max-height: 400px;
             overflow-y: auto;
-            scrollbar-width: thin;
-        }
-        .btn-lg {
-            min-width: 120px;
-        }
-        .form-control:focus {
-            border-color: #86b7fe;
-            box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
-        }
-        .toast {
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            z-index: 1000;
         }
     </style>
 </head>
@@ -71,15 +49,14 @@
         <div class="row justify-content-center">
             <div class="col-md-8 col-lg-6">
                 <div class="card">
-                    <div class="card-header text-white">
-                        <h2 class="h4 mb-0"><i class="bi bi-cpu"></i> ESP32 Servo Control</h2>
+                    <div class="card-header bg-primary text-white">
+                        <h2 class="h4 mb-0">ESP32 Control Panel</h2>
                     </div>
                     <div class="card-body">
                         <!-- Connection Section -->
                         <div class="mb-4">
                             <label for="ipInput" class="form-label">ESP32 IP Address</label>
                             <div class="input-group mb-3">
-                                <span class="input-group-text"><i class="bi bi-ip"></i></span>
                                 <input type="text" class="form-control" id="ipInput" 
                                        placeholder="192.168.1.100" value="192.168.8.170">
                                 <button class="btn btn-primary" type="button" id="btnConnect">
@@ -93,21 +70,11 @@
                             </div>
                         </div>
 
-                        <!-- Control Buttons -->
-                        <div class="text-center mb-4">
-                            <button class="btn btn-success btn-lg me-2" id="btnOn" disabled>
-                                <i class="bi bi-power"></i> Turn ON
-                            </button>
-                            <button class="btn btn-danger btn-lg" id="btnOff" disabled>
-                                <i class="bi bi-power-off"></i> Turn OFF
-                            </button>
-                        </div>
-
                         <!-- Command History -->
                         <div class="mt-4">
                             <div class="d-flex justify-content-between align-items-center mb-2">
-                                <h5 class="mb-0"><i class="bi bi-clock-history"></i> Command History</h5>
-                                <button class="btn btn-sm btn-outline-secondary" id="btnRefreshHistory">
+                                <h5 class="mb-0">Command History</h5>
+                                <button class="btn btn-sm btn-outline-secondary" id="btnRefresh">
                                     <i class="bi bi-arrow-clockwise"></i> Refresh
                                 </button>
                             </div>
@@ -118,334 +85,261 @@
                             </div>
                         </div>
                     </div>
-                    <div class="card-footer text-muted small">
-                        <div class="d-flex justify-content-between">
-                            <span>Last updated: <span id="lastUpdated">Just now</span></span>
-                            <span>v1.0.0</span>
-                        </div>
-                    </div>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- Toast Notifications -->
-    <div class="toast align-items-center text-white bg-success border-0" role="alert" id="toastSuccess">
-        <div class="d-flex">
-            <div class="toast-body">
-                <i class="bi bi-check-circle me-2"></i>
-                <span id="toastSuccessMessage">Operation successful</span>
-            </div>
-            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
-        </div>
-    </div>
-
-    <!-- Bootstrap JS Bundle with Popper -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <!-- Supabase JS -->
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script id="supabase-script" src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-
+    <!-- Load Supabase first -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
-    // Global variables
-    let supabase;
-    let socket = null;
-    let isConnected = false;
+    // Initialize Supabase client
+    const SUPABASE_URL = 'https://cfmizvheukraeksdelpv.supabase.co';
+    const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNmbWl6dmhldWtyYWVrc2RlbHB2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjUwMjcyMjIsImV4cCI6MjA4MDYwMzIyMn0.JuYOGS94SfItvYYiv76iiBj9AdOH9ZJnZAa6G7tF9fs';
+    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+</script>
 
-    // Initialize Supabase
-function initSupabase() {
-        // Check if supabase is available
-        if (typeof supabase === 'undefined') {
-            console.error('Supabase not loaded yet');
-            return null;
+    <!-- Then load the rest of the scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Global variables
+        let socket = null;
+        let isConnected = false;
+
+        // DOM Elements
+        const elements = {
+            ipInput: document.getElementById('ipInput'),
+            btnConnect: document.getElementById('btnConnect'),
+            statusIndicator: document.getElementById('statusIndicator'),
+            statusText: document.getElementById('statusText'),
+            commandHistory: document.getElementById('commandHistory'),
+            connectSpinner: document.getElementById('connectSpinner'),
+            connectText: document.getElementById('connectText'),
+            btnRefresh: document.getElementById('btnRefresh')
+        };
+
+// Update the loadCommandHistory function
+async function loadCommandHistory() {
+    try {
+        elements.commandHistory.innerHTML = '<li class="list-group-item text-muted text-center py-4">Loading history...</li>';
+        
+        const { data, error } = await supabase
+            .from('commands')
+            .select('*')
+            .order('created_at', { ascending: false })
+            .limit(20);
+        
+        if (error) throw error;
+        
+        if (data.length === 0) {
+            elements.commandHistory.innerHTML = '<li class="list-group-item text-muted text-center py-4">No commands found</li>';
+            return;
         }
         
-        const SUPABASE_URL = 'https://cfmizvheukraeksdelpv.supabase.co';
-        const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNmbWl6dmhldWtyYWVrc2RlbHB2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjUwMjcyMjIsImV4cCI6MjA4MDYwMzIyMn0.JuYOGS94SfItvYYiv76iiBj9AdOH9ZJnZAa6G7tF9fs';
-        return window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-    }
-
-    // DOM Elements
-    const elements = {
-        ipInput: document.getElementById('ipInput'),
-        btnConnect: document.getElementById('btnConnect'),
-        btnOn: document.getElementById('btnOn'),
-        btnOff: document.getElementById('btnOff'),
-        btnRefresh: document.getElementById('btnRefreshHistory'),
-        statusIndicator: document.getElementById('statusIndicator'),
-        statusText: document.getElementById('statusText'),
-        commandHistory: document.getElementById('commandHistory'),
-        connectSpinner: document.getElementById('connectSpinner'),
-        connectText: document.getElementById('connectText'),
-        lastUpdated: document.getElementById('lastUpdated')
-    };
-
-    // Show toast notification
-    function showToast(message, type = 'success') {
-        const toast = document.getElementById(`toast${type.charAt(0).toUpperCase() + type.slice(1)}`);
-        const toastMessage = toast.querySelector('.toast-body span');
-        toastMessage.textContent = message;
+        // Group commands by their values
+        const commandsByValue = {};
         
-        const toastBootstrap = bootstrap.Toast.getOrCreateInstance(toast);
-        toast.className = `toast align-items-center text-white border-0 bg-${type}`;
-        toastBootstrap.show();
-    }
-
-    // Update last updated time
-    function updateLastUpdated() {
-        elements.lastUpdated.textContent = new Date().toLocaleTimeString();
-    }
-
-    // Save command to Supabase
-    async function saveCommand(command) {
+        data.forEach(cmd => {
+            const value = cmd.command_value || 0; // Default to 0 if not set
+            if (!commandsByValue[value]) {
+                commandsByValue[value] = [];
+            }
+            commandsByValue[value].push(cmd);
+        });
+        
+        // Create command buttons container
+        const commandButtons = document.createElement('div');
+        commandButtons.className = 'command-buttons';
+        commandButtons.style.marginBottom = '20px';
+        
+        // Create history list
+        const historyList = document.createElement('ul');
+        historyList.className = 'list-group list-group-flush';
+        historyList.innerHTML = '';
+        
+        // Create buttons for each command value
+        Object.entries(commandsByValue).forEach(([value, cmds]) => {
+            const button = document.createElement('button');
+            button.className = 'btn btn-outline-primary me-2 mb-2';
+            button.textContent = `Command ${value}`;
+            button.title = `Sends value: ${value}`;
+            button.onclick = async () => {
+    if (isConnected && socket && socket.readyState === WebSocket.OPEN) {
         try {
-            const { data, error } = await supabase
-                .from('commands')
-                .insert([{ 
-                    command,
-                    device: 'servo',
-                    user_agent: navigator.userAgent 
-                }])
-                .select();
+            // Send the command value to Arduino
+            socket.send(String(value));
             
-            if (error) throw error;
-            return data?.[0];
-        } catch (error) {
-            console.error('Error saving command:', error);
-            showToast('Failed to save command', 'danger');
-            return null;
+            // Prepare the data to save
+            const commandData = {
+                command: `Command ${value}`,
+                command_value: parseInt(value)
+            };
+            
+            // Only include device if the column exists
+            try {
+                // Try to save to Supabase
+                const { data: newCmd, error: saveError } = await supabase
+                    .from('commands')
+                    .insert([commandData])
+                    .select();
+                
+                if (saveError) throw saveError;
+                
+            } catch (dbError) {
+                console.warn('Could not save to database:', dbError);
+                // Continue even if save fails
+            }
+            
+            // Add to history UI
+            const newLi = document.createElement('li');
+            newLi.className = 'list-group-item d-flex justify-content-between align-items-center';
+            newLi.innerHTML = `
+                <div class="d-flex align-items-center">
+                    <i class="bi bi-send-check me-2 text-success"></i>
+                    <span>Sent: ${value}</span>
+                </div>
+                <small class="text-muted">Just now</small>
+            `;
+            historyList.insertBefore(newLi, historyList.firstChild);
+            
+        } catch (err) {
+            console.error('Error sending command:', err);
         }
     }
+};
+            commandButtons.appendChild(button);
+        });
+        
+        data.forEach(cmd => {
+    const li = document.createElement('li');
+    li.className = 'list-group-item d-flex justify-content-between align-items-center';
+    
+    const value = cmd.command_value !== undefined ? cmd.command_value : 
+                 (cmd.command === '1' || cmd.command?.toLowerCase() === 'on' ? 1 : 0);
+    
+    li.innerHTML = `
+        <div class="d-flex align-items-center">
+            <i class="bi bi-${value ? 'check-circle' : 'circle'} me-2 
+               text-${value ? 'success' : 'secondary'}"></i>
+            <span>${cmd.command || `Command ${value}`}</span>
+        </div>
+        <div>
+            <small class="text-muted me-2">Value: ${value}</small>
+            <small class="text-muted">${new Date(cmd.created_at).toLocaleString()}</small>
+        </div>
+    `;
+    
+    historyList.appendChild(li);
+});
+        
+        // Update the UI
+        elements.commandHistory.innerHTML = '';
+        elements.commandHistory.appendChild(commandButtons);
+        elements.commandHistory.appendChild(historyList);
+        
+    } catch (error) {
+        console.error('Error loading history:', error);
+        elements.commandHistory.innerHTML = 
+            '<div class="alert alert-danger">Failed to load command history</div>';
+    }
+}
+        // Update UI state
+        function updateUI(connected) {
+            isConnected = connected;
+            
+            if (connected) {
+                elements.connectText.textContent = 'Disconnect';
+                elements.btnConnect.classList.remove('btn-primary');
+                elements.btnConnect.classList.add('btn-danger');
+                elements.statusIndicator.className = 'status-indicator status-connected';
+                elements.statusText.textContent = 'Status: Connected';
+            } else {
+                elements.connectText.textContent = 'Connect';
+                elements.btnConnect.classList.remove('btn-danger');
+                elements.btnConnect.classList.add('btn-primary');
+                elements.statusIndicator.className = 'status-indicator status-disconnected';
+                elements.statusText.textContent = 'Status: Disconnected';
+            }
+            
+            elements.connectSpinner.classList.add('d-none');
+        }
 
-    // Load command history from Supabase
-    async function loadCommandHistory() {
-        try {
-            elements.commandHistory.innerHTML = '<li class="list-group-item text-muted text-center py-4">Loading history...</li>';
-            
-            const { data, error } = await supabase
-                .from('commands')
-                .select('*')
-                .order('created_at', { ascending: false })
-                .limit(10);
-            
-            if (error) throw error;
-            
-            if (data.length === 0) {
-                elements.commandHistory.innerHTML = '<li class="list-group-item text-muted text-center py-4">No commands yet</li>';
+        // Connect to WebSocket
+        function connect() {
+            if (socket) {
+                socket.close();
                 return;
             }
-            
-            elements.commandHistory.innerHTML = '';
-            data.forEach(cmd => {
-                addCommandToUI(cmd.command, new Date(cmd.created_at));
-            });
-            
-            updateLastUpdated();
-            showToast('History updated', 'success');
-        } catch (error) {
-            console.error('Error loading history:', error);
-            elements.commandHistory.innerHTML = 
-                '<li class="list-group-item text-danger text-center py-4">Failed to load history</li>';
-        }
-    }
 
-    // Add command to UI
-    function addCommandToUI(command, timestamp) {
-        if (elements.commandHistory.firstChild?.textContent === 'No commands yet' || 
-            elements.commandHistory.firstChild?.textContent === 'Loading history...') {
-            elements.commandHistory.innerHTML = '';
-        }
-        
-        const li = document.createElement('li');
-        li.className = 'list-group-item d-flex justify-content-between align-items-center';
-        
-        const isOn = command === '1' || command.toLowerCase() === 'on';
-        const iconClass = isOn ? 'bi-power text-success' : 'bi-power-off text-danger';
-        const commandText = isOn ? 'ON' : 'OFF';
-        
-        li.innerHTML = `
-            <div class="d-flex align-items-center">
-                <i class="bi ${iconClass} me-2"></i>
-                <span>Command: <strong>${commandText}</strong></span>
-            </div>
-            <small class="text-muted">${timestamp.toLocaleString()}</small>
-        `;
-        
-        elements.commandHistory.prepend(li);
-        
-        if (elements.commandHistory.children.length > 10) {
-            elements.commandHistory.removeChild(elements.commandHistory.lastChild);
-        }
-    }
-
-    // Update UI state
-    function updateUI(connected) {
-        isConnected = connected;
-        
-        if (connected) {
-            elements.connectText.textContent = 'Disconnect';
-            elements.btnConnect.classList.remove('btn-primary');
-            elements.btnConnect.classList.add('btn-danger');
-            elements.statusIndicator.className = 'status-indicator status-connected';
-            elements.statusText.textContent = 'Status: Connected';
-            showToast('Connected to ESP32', 'success');
-        } else {
-            elements.connectText.textContent = 'Connect';
-            elements.btnConnect.classList.remove('btn-danger');
-            elements.btnConnect.classList.add('btn-primary');
-            elements.statusIndicator.className = 'status-indicator status-disconnected';
-            elements.statusText.textContent = 'Status: Disconnected';
-        }
-        
-        elements.btnOn.disabled = !connected;
-        elements.btnOff.disabled = !connected;
-        elements.connectSpinner.classList.add('d-none');
-    }
-
-    // Send command to ESP32 and save to Supabase
-    async function sendCommand(command) {
-        if (!isConnected || !socket || socket.readyState !== WebSocket.OPEN) {
-            showToast('Not connected to ESP32', 'warning');
-            return;
-        }
-
-        try {
-            socket.send(command);
-            const savedCommand = await saveCommand(command);
-            if (savedCommand) {
-                addCommandToUI(command, new Date(savedCommand.created_at));
-                updateLastUpdated();
+            const ip = elements.ipInput.value.trim();
+            if (!ip) {
+                return;
             }
-        } catch (error) {
-            console.error('Error sending command:', error);
-            showToast('Failed to send command', 'danger');
-        }
-    }
 
-    // Connect to WebSocket
-    function connect() {
-        if (socket) {
-            socket.close();
-            return;
-        }
-
-        const ip = elements.ipInput.value.trim();
-        if (!ip) {
-            showToast('Please enter ESP32 IP address', 'warning');
-            return;
-        }
-
-        const wsUrl = `ws://${ip}:81/`;
-        console.log('Connecting to:', wsUrl);
-        
-        try {
-            elements.statusText.textContent = 'Status: Connecting...';
-            elements.statusIndicator.className = 'status-indicator status-connecting';
-            elements.connectSpinner.classList.remove('d-none');
-            elements.connectText.textContent = 'Connecting...';
-            elements.btnConnect.disabled = true;
+            const wsUrl = `ws://${ip}:81/`;
+            console.log('Connecting to:', wsUrl);
             
-            socket = new WebSocket(wsUrl);
+            try {
+                elements.statusText.textContent = 'Status: Connecting...';
+                elements.statusIndicator.className = 'status-indicator status-connecting';
+                elements.connectSpinner.classList.remove('d-none');
+                elements.connectText.textContent = 'Connecting...';
+                elements.btnConnect.disabled = true;
+                
+                socket = new WebSocket(wsUrl);
 
-            socket.onopen = () => {
-                console.log('WebSocket connected');
-                updateUI(true);
-                saveCommand('CONNECTED');
-                loadCommandHistory();
-            };
+                socket.onopen = () => {
+                    console.log('WebSocket connected');
+                    updateUI(true);
+                    loadCommandHistory();
+                };
 
-            socket.onclose = () => {
-                console.log('WebSocket disconnected');
-                updateUI(false);
-                socket = null;
-                showToast('Disconnected from ESP32', 'info');
-            };
+                socket.onclose = () => {
+                    console.log('WebSocket disconnected');
+                    updateUI(false);
+                    socket = null;
+                };
 
-            socket.onerror = (error) => {
-                console.error('WebSocket error:', error);
-                elements.statusText.textContent = 'Status: Connection Failed';
+                socket.onerror = (error) => {
+                    console.error('WebSocket error:', error);
+                    elements.statusText.textContent = 'Status: Connection Failed';
+                    elements.statusIndicator.className = 'status-indicator status-disconnected';
+                    elements.connectSpinner.classList.add('d-none');
+                    elements.connectText.textContent = 'Connect';
+                    elements.btnConnect.disabled = false;
+                };
+
+            } catch (error) {
+                console.error('Error creating WebSocket:', error);
+                elements.statusText.textContent = `Error: ${error.message}`;
                 elements.statusIndicator.className = 'status-indicator status-disconnected';
-                showToast('Connection failed', 'danger');
                 elements.connectSpinner.classList.add('d-none');
                 elements.connectText.textContent = 'Connect';
                 elements.btnConnect.disabled = false;
-            };
-
-            socket.onmessage = (event) => {
-                console.log('Received:', event.data);
-            };
-
-        } catch (error) {
-            console.error('Error creating WebSocket:', error);
-            elements.statusText.textContent = `Error: ${error.message}`;
-            elements.statusIndicator.className = 'status-indicator status-disconnected';
-            showToast(`Error: ${error.message}`, 'danger');
-            elements.connectSpinner.classList.add('d-none');
-            elements.connectText.textContent = 'Connect';
-            elements.btnConnect.disabled = false;
-        }
-    }
-
-    // Initialize the application
-    function init() {
-        // Initialize Supabase
-        supabase = initSupabase();
-        if (!supabase) {
-            console.error('Failed to initialize Supabase');
-            showToast('Failed to initialize database connection', 'danger');
-            // Try to reinitialize after a delay
-            setTimeout(init, 1000);
-            return;
-        }
-        // Event Listeners
-        elements.btnConnect.addEventListener('click', connect);
-        elements.btnOn.addEventListener('click', () => sendCommand('1'));
-        elements.btnOff.addEventListener('click', () => sendCommand('0'));
-        elements.btnRefresh.addEventListener('click', loadCommandHistory);
-        
-        // Handle Enter key in IP input
-        elements.ipInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter' && !elements.btnConnect.disabled) {
-                connect();
             }
-        });
+        }
 
-        // Initial setup
-        updateUI(false);
-        
-        // Load initial command history
-        loadCommandHistory().catch(console.error);
+        // Initialize the application
+        function init() {
+            try {
+                // Set up event listeners
+                elements.btnConnect.addEventListener('click', connect);
+                elements.btnRefresh.addEventListener('click', loadCommandHistory);
+                
+                // Load initial command history
+                loadCommandHistory().catch(console.error);
+                
+                // Initial UI state
+                updateUI(false);
+                
+            } catch (error) {
+                console.error('Error initializing application:', error);
+                alert('Failed to initialize application. Please check console for details.');
+            }
+        }
 
-        // Set up real-time subscription for command updates
-        const subscription = supabase
-            .channel('commands')
-            .on('postgres_changes', 
-                { 
-                    event: 'INSERT', 
-                    schema: 'public', 
-                    table: 'commands' 
-                },
-                (payload) => {
-                    console.log('New command received:', payload.new);
-                    addCommandToUI(
-                        payload.new.command, 
-                        new Date(payload.new.created_at)
-                    );
-                    updateLastUpdated();
-                }
-            )
-            .subscribe((status) => {
-                console.log('Supabase subscription status:', status);
-            });
-
-        // Show welcome message
-        setTimeout(() => {
-            showToast('Welcome to ESP32 Servo Control', 'info');
-        }, 1000);
-    }
-
-    // Start the application when the DOM is fully loaded
-    document.addEventListener('DOMContentLoaded', init);
-</script>
+        // Start the application when the DOM is fully loaded
+        document.addEventListener('DOMContentLoaded', init);
+    </script>
 </body>
 </html>
