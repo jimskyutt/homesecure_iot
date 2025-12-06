@@ -276,7 +276,7 @@ async function loadCommandHistory() {
                 return;
             }
 
-            const wsUrl = `ws://${ip}:81/`;
+            const wsUrl = `wss://${ip}:81/`;
             console.log('Connecting to:', wsUrl);
             
             try {
