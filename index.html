@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Remote Servo Control</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            min-height: 100vh;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            padding: 40px;
+            max-width: 450px;
+            width: 100%;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        h1 {
+            color: #333;
+            font-size: 28px;
+            margin-bottom: 10px;
+        }
+
+        .subtitle {
+            color: #666;
+            font-size: 16px;
+        }
+
+        .connection-status {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            margin-top: 15px;
+            padding: 8px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 500;
+        }
+
+        .connection-status.connected {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .connection-status.disconnected {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .status-indicator {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+
+        .status-indicator.connected {
+            background: #28a745;
+        }
+
+        .status-indicator.disconnected {
+            background: #dc3545;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .status-display {
+            background: #f8f9fa;
+            border-radius: 15px;
+            padding: 30px;
+            margin: 30px 0;
+            text-align: center;
+        }
+
+        .status-label {
+            color: #666;
+            font-size: 14px;
+            margin-bottom: 10px;
+        }
+
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            padding: 12px 24px;
+            border-radius: 25px;
+            font-size: 20px;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+
+        .status-badge.on {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .status-badge.off {
+            background: #e2e3e5;
+            color: #383d41;
+        }
+
+        .controls {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-bottom: 30px;
+        }
+
+        button {
+            padding: 18px 24px;
+            border: none;
+            border-radius: 12px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            color: white;
+        }
+
+        button:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+        }
+
+        button:active:not(:disabled) {
+            transform: translateY(0);
+        }
+
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .btn-on {
+            background: #28a745;
+        }
+
+        .btn-on.active {
+            background: #218838;
+            box-shadow: 0 5px 15px rgba(40, 167, 69, 0.3);
+        }
+
+        .btn-off {
+            background: #dc3545;
+        }
+
+        .btn-off.active {
+            background: #c82333;
+            box-shadow: 0 5px 15px rgba(220, 53, 69, 0.3);
+        }
+
+        .info-box {
+            background: #e7f3ff;
+            border-left: 4px solid #667eea;
+            padding: 15px;
+            border-radius: 8px;
+            font-size: 13px;
+            color: #004085;
+        }
+
+        .info-box strong {
+            display: block;
+            margin-bottom: 5px;
+        }
+
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top-color: white;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎛️ Remote Servo Control</h1>
+            <p class="subtitle">Manila → Iloilo</p>
+            <div class="connection-status" id="connectionStatus">
+                <div class="status-indicator"></div>
+                <span>Checking connection...</span>
+            </div>
+        </div>
+
+        <div class="status-display">
+            <div class="status-label">Current Status</div>
+            <div class="status-badge off" id="statusBadge">
+                <span>⚡</span>
+                <span id="statusText">OFF</span>
+            </div>
+        </div>
+
+        <div class="controls">
+            <button class="btn-on" id="btnOn" onclick="updateServo('on')">
+                Turn ON
+            </button>
+            <button class="btn-off active" id="btnOff" onclick="updateServo('off')">
+                Turn OFF
+            </button>
+        </div>
+
+        <div class="info-box">
+            <strong>⚙️ Setup Required:</strong>
+            Replace FIREBASE_URL in the script below with your Firebase Realtime Database URL.
+        </div>
+    </div>
+
+    <script>
+        // Firebase Configuration - REPLACE WITH YOUR VALUES
+        const FIREBASE_URL = 'https://home-83fb6-default-rtdb.asia-southeast1.firebasedatabase.app/servo.json';
+
+        let currentState = 'off';
+        let isLoading = false;
+
+        // Update servo state in Firebase
+        async function updateServo(state) {
+            if (isLoading || currentState === state) return;
+            
+            isLoading = true;
+            updateButtonStates(state, true);
+
+            try {
+                const response = await fetch(FIREBASE_URL, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ state: state })
+                });
+
+                if (response.ok) {
+                    currentState = state;
+                    updateUI(state);
+                    updateConnectionStatus(true);
+                } else {
+                    alert('Failed to update servo state');
+                    updateConnectionStatus(false);
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Error connecting to Firebase. Check your Firebase URL.');
+                updateConnectionStatus(false);
+            }
+
+            isLoading = false;
+            updateButtonStates(state, false);
+        }
+
+        // Check current state from Firebase
+        async function checkState() {
+            try {
+                const response = await fetch(FIREBASE_URL);
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data && data.state) {
+                        currentState = data.state;
+                        updateUI(data.state);
+                    }
+                    updateConnectionStatus(true);
+                } else {
+                    updateConnectionStatus(false);
+                }
+            } catch (error) {
+                console.error('Error checking state:', error);
+                updateConnectionStatus(false);
+            }
+        }
+
+        // Update UI elements
+        function updateUI(state) {
+            const statusBadge = document.getElementById('statusBadge');
+            const statusText = document.getElementById('statusText');
+            const btnOn = document.getElementById('btnOn');
+            const btnOff = document.getElementById('btnOff');
+
+            statusText.textContent = state.toUpperCase();
+            
+            if (state === 'on') {
+                statusBadge.className = 'status-badge on';
+                btnOn.classList.add('active');
+                btnOff.classList.remove('active');
+            } else {
+                statusBadge.className = 'status-badge off';
+                btnOff.classList.add('active');
+                btnOn.classList.remove('active');
+            }
+        }
+
+        // Update button states during loading
+        function updateButtonStates(state, loading) {
+            const btnOn = document.getElementById('btnOn');
+            const btnOff = document.getElementById('btnOff');
+
+            if (loading) {
+                if (state === 'on') {
+                    btnOn.innerHTML = '<div class="loading"></div>';
+                    btnOn.disabled = true;
+                } else {
+                    btnOff.innerHTML = '<div class="loading"></div>';
+                    btnOff.disabled = true;
+                }
+            } else {
+                btnOn.innerHTML = 'Turn ON';
+                btnOff.innerHTML = 'Turn OFF';
+                btnOn.disabled = currentState === 'on';
+                btnOff.disabled = currentState === 'off';
+            }
+        }
+
+        // Update connection status indicator
+        function updateConnectionStatus(connected) {
+            const statusDiv = document.getElementById('connectionStatus');
+            const indicator = statusDiv.querySelector('.status-indicator');
+            const text = statusDiv.querySelector('span');
+
+            if (connected) {
+                statusDiv.className = 'connection-status connected';
+                indicator.className = 'status-indicator connected';
+                text.textContent = 'Connected';
+            } else {
+                statusDiv.className = 'connection-status disconnected';
+                indicator.className = 'status-indicator disconnected';
+                text.textContent = 'Disconnected';
+            }
+        }
+
+        // Initialize on page load
+        window.addEventListener('load', () => {
+            checkState();
+            // Check state every 5 seconds
+            setInterval(checkState, 5000);
+        });
+    </script>
+</body>
+</html>
