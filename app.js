@@ -1,5 +1,5 @@
 let isConnected = false;
-const API_URL = 'https://your-vercel-app.vercel.app/api'; // Replace with your Vercel app URL
+const API_URL = 'https://homesecure-iot.vercel.app/api'; // Replace with your Vercel app URL
 
 document.getElementById('connectBtn').addEventListener('click', async () => {
     const esp32Ip = document.getElementById('esp32Ip').value.trim();
