@@ -1,5 +1,5 @@
 let isConnected = false;
-const API_URL = 'https://homesecure-iot.vercel.app/api'; // Replace with your Vercel app URL
+const API_URL = 'https://homesecure-iot.vercel.app/api'; // Your Vercel app URL
 
 document.getElementById('connectBtn').addEventListener('click', async () => {
     const esp32Ip = document.getElementById('esp32Ip').value.trim();
@@ -7,6 +7,12 @@ document.getElementById('connectBtn').addEventListener('click', async () => {
         alert('Please enter a valid IP address');
         return;
     }
+
+    // Show loading state
+    const connectBtn = document.getElementById('connectBtn');
+    const originalBtnText = connectBtn.textContent;
+    connectBtn.disabled = true;
+    connectBtn.textContent = 'Connecting...';
 
     try {
         const response = await fetch(`${API_URL}/register`, {
@@ -17,19 +23,28 @@ document.getElementById('connectBtn').addEventListener('click', async () => {
             body: JSON.stringify({ ip: esp32Ip })
         });
 
+        const data = await response.json();
+
         if (response.ok) {
-            const data = await response.json();
             isConnected = true;
             document.getElementById('status').textContent = 'Status: Connected';
             document.getElementById('onBtn').disabled = false;
             document.getElementById('offBtn').disabled = false;
-            localStorage.setItem('esp32Ip', esp32Ip); // Save IP for future use
+            localStorage.setItem('esp32Ip', esp32Ip);
         } else {
-            throw new Error('Failed to connect');
+            throw new Error(data.error || 'Failed to connect to ESP32');
         }
     } catch (err) {
         console.error('Connection error:', err);
-        alert('Failed to connect to ESP32. Check the IP and try again.');
+        alert(err.message || 'Failed to connect to ESP32. Check the IP and try again.');
+        isConnected = false;
+        document.getElementById('status').textContent = 'Status: Disconnected';
+        document.getElementById('onBtn').disabled = true;
+        document.getElementById('offBtn').disabled = true;
+    } finally {
+        // Reset button state
+        connectBtn.disabled = false;
+        connectBtn.textContent = originalBtnText;
     }
 });
 
