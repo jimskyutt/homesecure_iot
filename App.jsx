@@ -22,22 +22,45 @@ function App() {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 10000);
 
-      const response = await fetch(url, {
-        method: 'GET',
-        mode: 'no-cors',
-        cache: 'no-cache',
-        signal: controller.signal,
-        headers: {
-          'Accept': 'text/plain',
-          'Cache-Control': 'no-cache'
-        }
-      }).finally(() => clearTimeout(timeoutId));
+      // Create a proxy endpoint URL that will be handled by Vercel
+      const proxyUrl = `https://cors-anywhere.herokuapp.com/${url}`;
+      
+      // Try with proxy first
+      let response;
+      try {
+        response = await fetch(proxyUrl, {
+          method: 'GET',
+          headers: {
+            'Accept': 'text/plain',
+            'Cache-Control': 'no-cache',
+            'X-Requested-With': 'XMLHttpRequest' // Required by some CORS proxies
+          },
+          signal: controller.signal
+        });
+      } catch (error) {
+        console.log('Proxy request failed, trying direct connection...');
+        // If proxy fails, try direct connection (will only work in development)
+        response = await fetch(url, {
+          method: 'GET',
+          mode: 'no-cors',
+          cache: 'no-cache',
+          signal: controller.signal,
+          headers: {
+            'Accept': 'text/plain',
+            'Cache-Control': 'no-cache'
+          }
+        });
+      } finally {
+        clearTimeout(timeoutId);
+      }
 
       showStatus('Successfully connected to ESP32!', 'success');
     } catch (error) {
       console.error('Connection error:', error);
       if (error.name === 'AbortError') {
         showStatus('Connection timed out. Check if the ESP32 is online and the port is forwarded correctly.', 'error');
+      } else if (error.message.includes('Failed to fetch')) {
+        showStatus('Connection blocked by browser. Try these solutions: 1. Use HTTPS in ESP32 2. Set up a CORS proxy 3. Use a domain with valid SSL', 'error');
       } else {
         showStatus('Failed to connect to ESP32. Please check: 1. Correct IP/domain and port 2. Port forwarding 3. Firewall settings 4. ESP32 is online', 'error');
       }
