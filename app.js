@@ -18,7 +18,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         try {
             // Test connection
-            const response = await fetch(`http://${ip}/status`, {
+            const response = await fetch(`https://${ip}/status`, {
                 method: 'GET',
                 timeout: 5000 // 5 seconds timeout
             });
@@ -52,7 +52,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const ip = esp32Ip.value.trim();
             
             try {
-                const response = await fetch(`http://${ip}/control`, {
+                const response = await fetch(`https://${ip}/control`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/x-www-form-urlencoded',
@@ -75,7 +75,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Function to update device status
     async function updateDeviceStatus(ip) {
         try {
-            const response = await fetch(`http://${ip}/status`, {
+            const response = await fetch(`https://${ip}/status`, {
                 method: 'GET',
                 timeout: 3000
             });
