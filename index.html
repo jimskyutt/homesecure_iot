@@ -188,6 +188,48 @@
             margin-bottom: 5px;
         }
 
+        .debug-panel {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            padding: 15px;
+            margin-top: 20px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+        }
+
+        .debug-panel h3 {
+            font-size: 14px;
+            margin-bottom: 10px;
+            color: #495057;
+        }
+
+        .debug-log {
+            max-height: 150px;
+            overflow-y: auto;
+            background: white;
+            padding: 10px;
+            border-radius: 4px;
+            border: 1px solid #dee2e6;
+        }
+
+        .debug-log div {
+            margin-bottom: 5px;
+            color: #495057;
+        }
+
+        .debug-log .success {
+            color: #28a745;
+        }
+
+        .debug-log .error {
+            color: #dc3545;
+        }
+
+        .debug-log .info {
+            color: #007bff;
+        }
+
         .toast {
             position: fixed;
             top: 20px;
@@ -287,6 +329,14 @@
             <strong>⚙️ Setup Required:</strong>
             Replace FIREBASE_URL in the script below with your Firebase Realtime Database URL.
         </div>
+
+        <!-- Debug Panel -->
+        <div class="debug-panel">
+            <h3>🔍 Debug Log (Open browser console for more details)</h3>
+            <div class="debug-log" id="debugLog">
+                <div class="info">Waiting for events...</div>
+            </div>
+        </div>
     </div>
 
     <!-- Toast Notification -->
@@ -302,7 +352,23 @@
 
         let currentState = 'off';
         let isLoading = false;
-        let lastMotionTime = 0;
+        let lastMotionTimestamp = 0;
+        let isPolling = false;
+
+        // Debug logging function
+        function addDebugLog(message, type = 'info') {
+            const debugLog = document.getElementById('debugLog');
+            const time = new Date().toLocaleTimeString();
+            const logEntry = document.createElement('div');
+            logEntry.className = type;
+            logEntry.textContent = `[${time}] ${message}`;
+            debugLog.insertBefore(logEntry, debugLog.firstChild);
+            
+            // Keep only last 10 logs
+            while (debugLog.children.length > 10) {
+                debugLog.removeChild(debugLog.lastChild);
+            }
+        }
 
         // Update servo state in Firebase
         async function updateServo(state) {
@@ -358,29 +424,78 @@
             }
         }
 
-        // Check for motion detection
-        async function checkMotion() {
-            try {
-                const response = await fetch(FIREBASE_MOTION_URL);
-                if (response.ok) {
-                    const data = await response.json();
-                    if (data && data.detected && data.timestamp) {
-                        // Only show toast if this is a new motion event
-                        if (data.timestamp > lastMotionTime) {
-                            lastMotionTime = data.timestamp;
-                            showToast('🚨 Motion detected in Iloilo!');
-                            updateMotionStatus(true);
+        // Check for motion detection with AJAX polling
+        function pollMotionDetection() {
+            if (isPolling) return; // Prevent multiple simultaneous requests
+            
+            isPolling = true;
+            
+            const xhr = new XMLHttpRequest();
+            xhr.open('GET', FIREBASE_MOTION_URL, true);
+            
+            xhr.onload = function() {
+                isPolling = false;
+                
+                if (xhr.status === 200) {
+                    try {
+                        const data = JSON.parse(xhr.responseText);
+                        console.log('Motion data:', data); // Debug log
+                        
+                        if (data && data.detected === true && data.timestamp) {
+                            const timestamp = parseInt(data.timestamp);
                             
-                            // Clear motion status after 5 seconds
-                            setTimeout(() => {
-                                updateMotionStatus(false);
-                            }, 5000);
+                            addDebugLog(`Motion data received: ${JSON.stringify(data)}`, 'info');
+                            
+                            // Check if this is a NEW motion event
+                            if (timestamp > lastMotionTimestamp) {
+                                console.log('NEW motion detected!'); // Debug log
+                                addDebugLog('🚨 NEW MOTION DETECTED!', 'success');
+                                
+                                lastMotionTimestamp = timestamp;
+                                
+                                // Show toast notification
+                                showToast('🚨 Motion detected in Iloilo!');
+                                
+                                // Update motion status display
+                                updateMotionStatus(true);
+                                
+                                // Clear the "detected" flag in Firebase after reading
+                                clearMotionFlag();
+                                
+                                // Hide motion status after 5 seconds
+                                setTimeout(() => {
+                                    updateMotionStatus(false);
+                                }, 5000);
+                            } else {
+                                addDebugLog('Old motion event (already processed)', 'info');
+                            }
+                        } else if (data && data.detected === false) {
+                            addDebugLog('Motion flag is false', 'info');
                         }
+                    } catch (e) {
+                        console.error('Error parsing motion data:', e);
+                        addDebugLog('Error parsing motion data: ' + e.message, 'error');
                     }
+                } else if (xhr.status === 404) {
+                    addDebugLog('No motion data in Firebase yet (404)', 'info');
                 }
-            } catch (error) {
-                console.error('Error checking motion:', error);
-            }
+            };
+            
+            xhr.onerror = function() {
+                isPolling = false;
+                console.error('Error polling motion data');
+                addDebugLog('Error polling motion data', 'error');
+            };
+            
+            xhr.send();
+        }
+        
+        // Clear motion flag in Firebase after reading
+        function clearMotionFlag() {
+            const xhr = new XMLHttpRequest();
+            xhr.open('PATCH', FIREBASE_MOTION_URL, true);
+            xhr.setRequestHeader('Content-Type', 'application/json');
+            xhr.send(JSON.stringify({ detected: false }));
         }
 
         // Show toast notification
@@ -479,12 +594,19 @@
 
         // Initialize on page load
         window.addEventListener('load', () => {
+            console.log('App started - polling for motion...');
+            addDebugLog('App initialized - Starting motion polling...', 'success');
+            
             checkState();
-            checkMotion();
-            // Check state every 5 seconds
+            pollMotionDetection();
+            
+            // Check servo state every 5 seconds
             setInterval(checkState, 5000);
-            // Check motion every 2 seconds
-            setInterval(checkMotion, 2000);
+            
+            // Poll motion detection every 1 second (faster polling)
+            setInterval(pollMotionDetection, 1000);
+            
+            addDebugLog('Polling every 1 second for motion events', 'info');
         });
     </script>
 </body>
