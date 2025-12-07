@@ -465,7 +465,7 @@
                                 // Hide motion status after 5 seconds
                                 setTimeout(() => {
                                     updateMotionStatus(false);
-                                }, 5000);
+                                }, 1000);
                             } else {
                                 addDebugLog('Old motion event (already processed)', 'info');
                             }
@@ -517,7 +517,7 @@
             // Hide after 5 seconds
             setTimeout(() => {
                 toast.classList.remove('show');
-            }, 5000);
+            }, 1000);
         }
 
         // Update motion status text
