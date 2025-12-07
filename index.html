@@ -601,10 +601,10 @@
             pollMotionDetection();
             
             // Check servo state every 5 seconds
-            setInterval(checkState, 5000);
+            setInterval(checkState, 500);
             
             // Poll motion detection every 1 second (faster polling)
-            setInterval(pollMotionDetection, 1000);
+            setInterval(pollMotionDetection, 500);
             
             addDebugLog('Polling every 1 second for motion events', 'info');
         });
