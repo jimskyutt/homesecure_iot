@@ -31,14 +31,15 @@ document.getElementById('connectBtn').addEventListener('click', async () => {
             document.getElementById('onBtn').disabled = false;
             document.getElementById('offBtn').disabled = false;
             localStorage.setItem('esp32Ip', esp32Ip);
+            alert('Successfully connected to ESP32!');
         } else {
-            throw new Error(data.error || 'Failed to connect to ESP32');
+            throw new Error(data.error || `Failed to connect (Status: ${response.status})`);
         }
     } catch (err) {
         console.error('Connection error:', err);
-        alert(err.message || 'Failed to connect to ESP32. Check the IP and try again.');
+        alert(`Connection failed: ${err.message}\n\nMake sure:\n1. The ESP32 is powered on\n2. The IP address is correct\n3. Both devices are on the same network\n4. No firewall is blocking port 80`);
         isConnected = false;
-        document.getElementById('status').textContent = 'Status: Disconnected';
+        document.getElementById('status').textContent = 'Status: Connection Failed';
         document.getElementById('onBtn').disabled = true;
         document.getElementById('offBtn').disabled = true;
     } finally {

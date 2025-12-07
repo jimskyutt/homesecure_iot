@@ -35,22 +35,33 @@ function testEsp32Connection(ip) {
         const options = {
             hostname: ip,
             port: 80,
-            path: '/',
-            method: 'HEAD',
-            timeout: 3000 // 3 second timeout
+            path: '/test',
+            method: 'GET',
+            timeout: 5000
         };
 
         const req = http.request(options, (res) => {
-            // If we get any response, the device is reachable
-            resolve(res.statusCode < 400);
+            let data = '';
+            res.on('data', (chunk) => data += chunk);
+            res.on('end', () => {
+                try {
+                    const response = JSON.parse(data);
+                    resolve(response.status === 'ok');
+                } catch (e) {
+                    console.error('Error parsing response:', e);
+                    resolve(false);
+                }
+            });
         });
 
-        req.on('error', () => {
+        req.on('error', (err) => {
+            console.error('Connection error:', err);
             resolve(false);
         });
 
         req.on('timeout', () => {
-            req.destroy(); // Kill the request
+            console.error('Connection timeout');
+            req.destroy();
             resolve(false);
         });
 
