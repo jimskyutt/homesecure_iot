@@ -1,45 +1,60 @@
 let isConnected = false;
-let esp32Ip = '';
+let socket = null;
+const wsProtocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
 
 document.getElementById('connectBtn').addEventListener('click', () => {
-    esp32Ip = document.getElementById('esp32Ip').value.trim();
+    const esp32Ip = document.getElementById('esp32Ip').value.trim();
     if (!esp32Ip) {
         alert('Please enter a valid IP address');
         return;
     }
-    
-    // Test connection
-    fetch(`http://${esp32Ip}/test`)
-        .then(response => response.text())
-        .then(data => {
-            if (data === 'OK') {
-                isConnected = true;
-                document.getElementById('status').textContent = 'Status: Connected';
-                document.getElementById('onBtn').disabled = false;
-                document.getElementById('offBtn').disabled = false;
-            }
-        })
-        .catch(err => {
-            console.error('Connection error:', err);
-            alert('Failed to connect to ESP32. Check the IP and try again.');
-        });
+
+    // Close existing connection if any
+    if (socket) {
+        socket.close();
+    }
+
+    // Connect to WebSocket server on ESP32
+    socket = new WebSocket(`${wsProtocol}${esp32Ip}/ws`);
+
+    socket.onopen = () => {
+        console.log('WebSocket connected');
+        isConnected = true;
+        document.getElementById('status').textContent = 'Status: Connected';
+        document.getElementById('onBtn').disabled = false;
+        document.getElementById('offBtn').disabled = false;
+    };
+
+    socket.onmessage = (event) => {
+        console.log('Message from server:', event.data);
+    };
+
+    socket.onerror = (error) => {
+        console.error('WebSocket error:', error);
+        alert('Failed to connect to ESP32. Check the IP and try again.');
+    };
+
+    socket.onclose = () => {
+        console.log('WebSocket disconnected');
+        isConnected = false;
+        document.getElementById('status').textContent = 'Status: Disconnected';
+        document.getElementById('onBtn').disabled = true;
+        document.getElementById('offBtn').disabled = true;
+    };
 });
 
 function sendCommand(command) {
-    if (!isConnected) {
+    if (!isConnected || !socket) {
         alert('Not connected to ESP32');
         return;
     }
     
-    fetch(`http://${esp32Ip}/control?cmd=${command}`)
-        .then(response => response.text())
-        .then(data => {
-            console.log('Command response:', data);
-        })
-        .catch(err => {
-            console.error('Error sending command:', err);
-            alert('Failed to send command');
-        });
+    try {
+        socket.send(JSON.stringify({ command }));
+    } catch (err) {
+        console.error('Error sending command:', err);
+        alert('Failed to send command');
+    }
 }
 
 document.getElementById('onBtn').addEventListener('click', () => sendCommand('ON'));
