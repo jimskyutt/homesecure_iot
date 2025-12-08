@@ -532,27 +532,21 @@
 
         // Handle slider input
         function handleSliderInput(e) {
-            const value = parseInt(e.target.value);
-            currentAngle = value;
-            sliderValue.textContent = `${value}°`;
-            lastManualMoveTime = Date.now();
-            
-            // Clear any pending updates
-            if (updateTimeout) {
-                clearTimeout(updateTimeout);
-            }
-            
-            // Throttle updates while dragging
-            const now = Date.now();
-            if (now - lastUpdateTime > UPDATE_THROTTLE || !isDragging) {
-                updateServoAngle(value, false, false);
-                lastUpdateTime = now;
-            } else {
-                updateTimeout = setTimeout(() => {
-                    updateServoAngle(value, false, false);
-                }, UPDATE_THROTTLE);
-            }
-        }
+    const value = parseInt(e.target.value);
+    currentAngle = value;
+    sliderValue.textContent = `${value}°`;
+    
+    // Clear any pending updates
+    if (updateTimeout) {
+        clearTimeout(updateTimeout);
+    }
+    
+    // Throttle updates while dragging
+    updateTimeout = setTimeout(() => {
+        updateServoAngle(value, true); // Always send final position
+    }, 50);
+}
+
 
         // Handle slider release
         function handleSliderRelease(e) {
@@ -581,103 +575,77 @@
         }
 
         // Update servo angle
-        async function updateServoAngle(angle, isFinal = false, isAutoMove = false) {
-            angle = parseInt(angle);
-            
-            // Don't send if angle hasn't changed
-            if (angle === lastSentAngle && !isFinal) {
-                return;
-            }
-            
-            // Don't send if this is a drag update and we're not forcing an update
-            if (isDragging && !isFinal && Math.abs(angle - lastSentAngle) < 2) {
-                return;
-            }
-            
-            lastSentAngle = angle;
-            
-            try {
-                const response = await fetch(FIREBASE_URL, {
-                    method: 'PATCH',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ 
-                        state: isAutoMove ? 'auto' : (isDragging ? 'manual' : 'on'),
-                        angle: angle,
-                        timestamp: Date.now() // Add timestamp to force update
-                    })
-                });
+        async function updateServoAngle(angle, isFinal = false) {
+    angle = parseInt(angle);
+    
+    try {
+        const response = await fetch(FIREBASE_URL, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+                angle: angle,
+                state: 'on', // Ensure servo stays on when manually controlling
+                timestamp: Date.now()
+            })
+        });
 
-                if (response.ok) {
-                    updateConnectionStatus(true);
-                    currentState = 'on';
-                    
-                    // Only log occasionally during drag to avoid spam
-                    if (!isDragging || isFinal || isAutoMove || Math.random() < 0.1) {
-                        addDebugLog(`Servo: ${angle}°${isAutoMove ? ' (Auto)' : ''}`, 'success');
-                    }
-                } else {
-                    throw new Error(`HTTP error: ${response.status}`);
-                }
-            } catch (error) {
-                console.error('Update error:', error);
-                updateConnectionStatus(false);
-                addDebugLog(`Error: ${error.message}`, 'error');
+        if (response.ok) {
+            if (!isFinal) {
+                addDebugLog(`Setting angle: ${angle}°`, 'info');
             }
+        } else {
+            throw new Error(`HTTP error: ${response.status}`);
         }
+    } catch (error) {
+        console.error('Update error:', error);
+        updateConnectionStatus(false);
+        addDebugLog(`Error: ${error.message}`, 'error');
+    }
+}
 
         // Update servo state (on/off)
         async function updateServo(state) {
-            if (currentState === state) return;
-            
-            const targetAngle = state === 'on' ? 90 : 0;
-            const button = state === 'on' ? btnOn : btnOff;
-            const buttonText = state === 'on' ? btnTextOn : btnTextOff;
-            
-            // Update button state immediately
-            button.disabled = true;
-            buttonText.textContent = state === 'on' ? 'Starting...' : 'Stopping...';
-            
-            try {
-                const response = await fetch(FIREBASE_URL, {
-                    method: 'PATCH',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ 
-                        state: state,
-                        angle: targetAngle,
-                        timestamp: Date.now() // Force update
-                    })
-                });
+    if (currentState === state) return;
+    
+    const targetAngle = state === 'on' ? 90 : 0;
+    const button = state === 'on' ? btnOn : btnOff;
+    const buttonText = state === 'on' ? btnTextOn : btnTextOff;
+    
+    button.disabled = true;
+    buttonText.textContent = state === 'on' ? 'Starting...' : 'Stopping...';
+    
+    try {
+        const response = await fetch(FIREBASE_URL, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+                state: state,
+                angle: targetAngle,  // Include angle for smooth transition
+                timestamp: Date.now()
+            })
+        });
 
-                if (response.ok) {
-                    currentState = state;
-                    currentAngle = targetAngle;
-                    slider.value = targetAngle;
-                    sliderValue.textContent = `${targetAngle}°`;
-                    
-                    if (state === 'on') {
-                        isAutoMode = true;
-                        startAutoMovement();
-                        addDebugLog('Auto movement started', 'success');
-                    } else {
-                        isAutoMode = false;
-                        stopAutoMovement();
-                        addDebugLog('Servo turned OFF', 'info');
-                    }
-                    
-                    updateUI(state);
-                    updateConnectionStatus(true);
-                } else {
-                    throw new Error(`HTTP error: ${response.status}`);
-                }
-            } catch (error) {
-                console.error('Error:', error);
-                updateConnectionStatus(false);
-                addDebugLog(`Error: ${error.message}`, 'error');
-            } finally {
-                // Reset button states
-                updateButtonStates(currentState, false);
+        if (response.ok) {
+            currentState = state;
+            updateUI(state);
+            updateButtonStates(state, false);
+            
+            if (state === 'on') {
+                addDebugLog('Auto movement started', 'success');
+            } else {
+                addDebugLog('Servo turned OFF', 'info');
             }
+        } else {
+            throw new Error(`HTTP error: ${response.status}`);
         }
+    } catch (error) {
+        console.error('Error:', error);
+        updateConnectionStatus(false);
+        addDebugLog(`Error: ${error.message}`, 'error');
+    } finally {
+        updateButtonStates(currentState, false);
+    }
+}
 
         // Check current state from Firebase
         async function checkState() {
