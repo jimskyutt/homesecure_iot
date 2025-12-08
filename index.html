@@ -424,79 +424,53 @@
             }
         }
 
-        // Check for motion detection with AJAX polling
-        function pollMotionDetection() {
-            if (isPolling) return; // Prevent multiple simultaneous requests
-            
-            isPolling = true;
-            
-            const xhr = new XMLHttpRequest();
-            xhr.open('GET', FIREBASE_MOTION_URL, true);
-            
-            xhr.onload = function() {
-                isPolling = false;
-                
-                if (xhr.status === 200) {
-                    try {
-                        const data = JSON.parse(xhr.responseText);
-                        console.log('Motion data:', data); // Debug log
-                        
-                        if (data && data.detected === true && data.timestamp) {
-                            const timestamp = parseInt(data.timestamp);
-                            
-                            addDebugLog(`Motion data received: ${JSON.stringify(data)}`, 'info');
-                            
-                            // Check if this is a NEW motion event
-                            if (timestamp > lastMotionTimestamp) {
-                                console.log('NEW motion detected!'); // Debug log
-                                addDebugLog('🚨 NEW MOTION DETECTED!', 'success');
-                                
-                                lastMotionTimestamp = timestamp;
-                                
-                                // Show toast notification
-                                showToast('🚨 Motion detected in Iloilo!');
-                                
-                                // Update motion status display
-                                updateMotionStatus(true);
-                                
-                                // Clear the "detected" flag in Firebase after reading
-                                clearMotionFlag();
-                                
-                                // Hide motion status after 5 seconds
-                                setTimeout(() => {
-                                    updateMotionStatus(false);
-                                }, 5000);
-                            } else {
-                                addDebugLog('Old motion event (already processed)', 'info');
-                            }
-                        } else if (data && data.detected === false) {
-                            addDebugLog('Motion flag is false', 'info');
-                        }
-                    } catch (e) {
-                        console.error('Error parsing motion data:', e);
-                        addDebugLog('Error parsing motion data: ' + e.message, 'error');
-                    }
-                } else if (xhr.status === 404) {
-                    addDebugLog('No motion data in Firebase yet (404)', 'info');
-                }
-            };
-            
-            xhr.onerror = function() {
-                isPolling = false;
-                console.error('Error polling motion data');
-                addDebugLog('Error polling motion data', 'error');
-            };
-            
-            xhr.send();
-        }
+        // Replace the existing pollMotionDetection function (around line 426) with this:
+async function pollMotionDetection() {
+    if (isPolling) return;
+    isPolling = true;
+    
+    try {
+        const response = await fetch(FIREBASE_MOTION_URL);
+        const data = await response.json();
         
-        // Clear motion flag in Firebase after reading
-        function clearMotionFlag() {
-            const xhr = new XMLHttpRequest();
-            xhr.open('PATCH', FIREBASE_MOTION_URL, true);
-            xhr.setRequestHeader('Content-Type', 'application/json');
-            xhr.send(JSON.stringify({ detected: false }));
+        if (data && data.detected) {
+            const currentTime = Date.now();
+            // Only show notification if it's a new detection (within last 5 seconds)
+            if (currentTime - lastMotionTimestamp > 5000) {
+                showToast('🚨 Motion detected in Iloilo!');
+                updateMotionStatus(true);
+                lastMotionTimestamp = currentTime;
+                
+                // Clear the motion flag after showing the notification
+                await clearMotionFlag();
+                
+                // Reset motion status after 5 seconds
+                setTimeout(() => {
+                    updateMotionStatus(false);
+                }, 5000);
+            }
         }
+    } catch (error) {
+        console.error('Error checking motion:', error);
+        addDebugLog('Error checking motion: ' + error.message, 'error');
+    } finally {
+        isPolling = false;
+    }
+    
+    // Check again after 1 second
+    setTimeout(pollMotionDetection, 1000);
+}
+
+// Update the clearMotionFlag function to return a Promise
+function clearMotionFlag() {
+    return fetch(FIREBASE_MOTION_URL, {
+        method: 'PATCH',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ detected: false })
+    });
+}
 
         // Show toast notification
         function showToast(message) {
