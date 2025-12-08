@@ -127,22 +127,28 @@
 
         /* Slider Styles */
         .slider-container {
-            margin: 25px 0;
-            padding: 0 10px;
+            background: #f8f9fa;
+            border-radius: 15px;
+            padding: 20px;
+            margin: 20px 0;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
         }
 
         .slider-header {
             display: flex;
             justify-content: space-between;
-            margin-bottom: 10px;
             align-items: center;
+            margin-bottom: 15px;
+        }
+
+        .slider-header span:first-child {
+            font-weight: 600;
+            color: #333;
+            font-size: 15px;
         }
 
         .slider-value {
-            background: #f0f0f0;
-            padding: 5px 12px;
-            border-radius: 15px;
-            font-weight: 600;
+            font-weight: 700;
             color: #333;
             min-width: 50px;
             text-align: center;
@@ -152,7 +158,7 @@
         input[type="range"] {
             -webkit-appearance: none;
             width: 100%;
-            height: 10px;
+            height: 8px;
             border-radius: 5px;
             background: #e0e0e0;
             outline: none;
@@ -180,7 +186,7 @@
         }
 
         input[type="range"]:active::-webkit-slider-thumb {
-            transform: scale(1.2);
+            transform: scale(1.1);
             box-shadow: 0 3px 6px rgba(0,0,0,0.3);
             background: #388e3c;
         }
@@ -318,7 +324,7 @@
             color: #c62828;
         }
 
-        .debug-log .info {
+               .debug-log .info {
             color: #1565c0;
         }
 
@@ -406,7 +412,7 @@
 
         <div class="controls">
             <button class="btn-on" id="btnOn">
-                <span class="btn-text">Turn ON (90°)</span>
+                <span class="btn-text">Turn ON (Auto)</span>
             </button>
             <button class="btn-off active" id="btnOff">
                 <span class="btn-text">Turn OFF (0°)</span>
@@ -433,7 +439,13 @@
         let lastSentAngle = -1;
         let updateTimeout = null;
         let lastUpdateTime = 0;
+        let isAutoMode = false;
+        let autoDirection = 1; // 1 for increasing, -1 for decreasing
+        let autoMoveInterval = null;
+        let lastManualMoveTime = 0;
         const UPDATE_THROTTLE = 50; // ms between updates while dragging
+        const AUTO_MOVE_DELAY = 50; // ms between angle updates in auto mode
+        const RESUME_AUTO_DELAY = 5000; // 5 seconds before resuming auto mode
 
         // DOM Elements
         const slider = document.getElementById('servoSlider');
@@ -451,17 +463,10 @@
         function initEventListeners() {
             // Slider events
             slider.addEventListener('input', handleSliderInput);
-            slider.addEventListener('mousedown', () => { 
-                isDragging = true; 
-                addDebugLog('Slider drag started', 'info');
-            });
-            
+            slider.addEventListener('mousedown', handleSliderStart);
             slider.addEventListener('mouseup', handleSliderRelease);
             slider.addEventListener('mouseleave', handleSliderRelease);
-            slider.addEventListener('touchstart', () => { 
-                isDragging = true;
-                addDebugLog('Touch drag started', 'info');
-            });
+            slider.addEventListener('touchstart', handleSliderStart);
             slider.addEventListener('touchend', handleSliderRelease);
             
             // Button events
@@ -477,11 +482,60 @@
             });
         }
 
+        // Start automatic movement
+        function startAutoMovement() {
+            if (autoMoveInterval) clearInterval(autoMoveInterval);
+            
+            autoMoveInterval = setInterval(() => {
+                if (!isAutoMode || isDragging) return;
+                
+                let newAngle = currentAngle + (2 * autoDirection);
+                
+                // Change direction at limits
+                if (newAngle >= 180) {
+                    newAngle = 180;
+                    autoDirection = -1;
+                    addDebugLog('Reached max angle, changing direction', 'info');
+                } else if (newAngle <= 0) {
+                    newAngle = 0;
+                    autoDirection = 1;
+                    addDebugLog('Reached min angle, changing direction', 'info');
+                }
+                
+                if (newAngle !== currentAngle) {
+                    currentAngle = newAngle;
+                    slider.value = newAngle;
+                    sliderValue.textContent = `${newAngle}°`;
+                    updateServoAngle(newAngle, false, true);
+                }
+            }, AUTO_MOVE_DELAY);
+            
+            addDebugLog('Auto movement started', 'success');
+        }
+
+        // Stop automatic movement
+        function stopAutoMovement() {
+            if (autoMoveInterval) {
+                clearInterval(autoMoveInterval);
+                autoMoveInterval = null;
+                addDebugLog('Auto movement stopped', 'info');
+            }
+        }
+
+        // Handle slider start
+        function handleSliderStart() {
+            isDragging = true;
+            isAutoMode = false;
+            lastManualMoveTime = Date.now();
+            addDebugLog('Manual control started', 'info');
+        }
+
         // Handle slider input
         function handleSliderInput(e) {
             const value = parseInt(e.target.value);
             currentAngle = value;
             sliderValue.textContent = `${value}°`;
+            lastManualMoveTime = Date.now();
             
             // Clear any pending updates
             if (updateTimeout) {
@@ -491,11 +545,11 @@
             // Throttle updates while dragging
             const now = Date.now();
             if (now - lastUpdateTime > UPDATE_THROTTLE || !isDragging) {
-                updateServoAngle(value);
+                updateServoAngle(value, false, false);
                 lastUpdateTime = now;
             } else {
                 updateTimeout = setTimeout(() => {
-                    updateServoAngle(value);
+                    updateServoAngle(value, false, false);
                 }, UPDATE_THROTTLE);
             }
         }
@@ -507,16 +561,27 @@
             isDragging = false;
             const value = parseInt(e.target.value);
             currentAngle = value;
+            lastManualMoveTime = Date.now();
             
             // Ensure final position is sent
             clearTimeout(updateTimeout);
-            updateServoAngle(value, true);
+            updateServoAngle(value, true, false);
+            
+            // Set a timeout to resume auto mode after 5 seconds of inactivity
+            setTimeout(() => {
+                if (!isDragging && currentState === 'on' && 
+                    Date.now() - lastManualMoveTime >= RESUME_AUTO_DELAY) {
+                    isAutoMode = true;
+                    startAutoMovement();
+                    addDebugLog('Resuming auto movement after manual control', 'info');
+                }
+            }, RESUME_AUTO_DELAY);
             
             addDebugLog(`Slider released at ${value}°`, 'info');
         }
 
         // Update servo angle
-        async function updateServoAngle(angle, isFinal = false) {
+        async function updateServoAngle(angle, isFinal = false, isAutoMove = false) {
             angle = parseInt(angle);
             
             // Don't send if angle hasn't changed
@@ -536,7 +601,7 @@
                     method: 'PATCH',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ 
-                        state: 'on',
+                        state: isAutoMove ? 'auto' : (isDragging ? 'manual' : 'on'),
                         angle: angle,
                         timestamp: Date.now() // Add timestamp to force update
                     })
@@ -545,11 +610,10 @@
                 if (response.ok) {
                     updateConnectionStatus(true);
                     currentState = 'on';
-                    updateUI('on');
                     
                     // Only log occasionally during drag to avoid spam
-                    if (!isDragging || Math.random() < 0.1) {
-                        addDebugLog(`Servo: ${angle}°`, 'success');
+                    if (!isDragging || isFinal || isAutoMove || Math.random() < 0.1) {
+                        addDebugLog(`Servo: ${angle}°${isAutoMove ? ' (Auto)' : ''}`, 'success');
                     }
                 } else {
                     throw new Error(`HTTP error: ${response.status}`);
@@ -571,7 +635,7 @@
             
             // Update button state immediately
             button.disabled = true;
-            buttonText.textContent = state === 'on' ? 'Turning ON...' : 'Turning OFF...';
+            buttonText.textContent = state === 'on' ? 'Starting...' : 'Stopping...';
             
             try {
                 const response = await fetch(FIREBASE_URL, {
@@ -589,9 +653,19 @@
                     currentAngle = targetAngle;
                     slider.value = targetAngle;
                     sliderValue.textContent = `${targetAngle}°`;
+                    
+                    if (state === 'on') {
+                        isAutoMode = true;
+                        startAutoMovement();
+                        addDebugLog('Auto movement started', 'success');
+                    } else {
+                        isAutoMode = false;
+                        stopAutoMovement();
+                        addDebugLog('Servo turned OFF', 'info');
+                    }
+                    
                     updateUI(state);
                     updateConnectionStatus(true);
-                    addDebugLog(`Turned ${state.toUpperCase()} (${targetAngle}°)`, 'success');
                 } else {
                     throw new Error(`HTTP error: ${response.status}`);
                 }
@@ -625,11 +699,21 @@
                         if (!isDragging) {
                             slider.value = currentAngle;
                             sliderValue.textContent = `${currentAngle}°`;
-                            updateUI(currentState);
-                            updateButtonStates(currentState, false);
                             
                             if (stateChanged) {
+                                updateUI(currentState);
+                                updateButtonStates(currentState, false);
+                                
+                                if (currentState === 'on' && !isDragging) {
+                                    isAutoMode = true;
+                                    startAutoMovement();
+                                } else if (currentState === 'off' && autoMoveInterval) {
+                                    stopAutoMovement();
+                                }
+                                
                                 addDebugLog(`State changed to: ${currentState.toUpperCase()}`, 'info');
+                            } else if (angleChanged) {
+                                addDebugLog(`Angle updated: ${currentAngle}°`, 'info');
                             }
                         }
                     }
@@ -648,20 +732,13 @@
             const text = document.getElementById('statusText');
             
             if (state === 'on') {
-                badge.classList.remove('off');
-                badge.classList.add('on');
-                text.textContent = 'ON';
-            } else {
-                badge.classList.remove('on');
-                badge.classList.add('off');
-                text.textContent = 'OFF';
-            }
-            
-            // Update slider appearance based on state
-            if (state === 'on') {
+                badge.className = 'status-badge on';
+                text.textContent = 'AUTO';
                 slider.removeAttribute('disabled');
                 slider.style.opacity = '1';
             } else {
+                badge.className = 'status-badge off';
+                text.textContent = 'OFF';
                 slider.setAttribute('disabled', 'true');
                 slider.style.opacity = '0.7';
             }
@@ -678,7 +755,7 @@
                 const isOn = state === 'on';
                 btnOn.disabled = isOn;
                 btnOff.disabled = !isOn;
-                btnTextOn.textContent = 'Turn ON (90°)';
+                btnTextOn.textContent = 'Turn ON (Auto)';
                 btnTextOff.textContent = 'Turn OFF (0°)';
                 
                 if (isOn) {
@@ -693,35 +770,37 @@
 
         // Update connection status
         function updateConnectionStatus(connected) {
-            const indicator = document.querySelector('.status-indicator');
-            const statusText = connectionStatus.querySelector('span');
+            const statusEl = document.getElementById('connectionStatus');
+            const indicator = statusEl.querySelector('.status-indicator');
             
             if (connected) {
-                connectionStatus.className = 'connection-status connected';
+                statusEl.className = 'connection-status connected';
                 indicator.className = 'status-indicator connected';
-                statusText.textContent = 'Connected to Firebase';
+                statusEl.innerHTML = '<div class="status-indicator connected"></div><span>Connected to Firebase</span>';
             } else {
-                connectionStatus.className = 'connection-status disconnected';
+                statusEl.className = 'connection-status disconnected';
                 indicator.className = 'status-indicator disconnected';
-                statusText.textContent = 'Disconnected from Firebase';
+                statusEl.innerHTML = '<div class="status-indicator disconnected"></div><span>Disconnected</span>';
             }
         }
 
         // Add debug log entry
         function addDebugLog(message, type = 'info') {
-            const time = new Date().toLocaleTimeString();
             const logEntry = document.createElement('div');
+            const time = new Date().toLocaleTimeString();
             logEntry.className = type;
-            logEntry.textContent = `[${time}] ${message}`;
+            logEntry.innerHTML = `<span style="color: #666">[${time}]</span> ${message}`;
+            
+            const debugLog = document.getElementById('debugLog');
             debugLog.insertBefore(logEntry, debugLog.firstChild);
             
-            // Keep only last 20 logs
+            // Limit log entries
             while (debugLog.children.length > 20) {
                 debugLog.removeChild(debugLog.lastChild);
             }
             
             // Auto-scroll to bottom
-            debugLog.scrollTop = debugLog.scrollHeight;
+            debugLog.scrollTop = 0;
         }
 
         // Update slider UI (for responsiveness)
@@ -734,7 +813,7 @@
             initEventListeners();
             checkState();
             
-            // Check state every 1.5 seconds (reduced from 2s)
+            // Check state every 1.5 seconds
             setInterval(checkState, 1500);
             
             // Initial connection status
@@ -752,7 +831,8 @@
                 addDebugLog('Connection lost', 'error');
             });
             
-            addDebugLog('System ready', 'success');
+            // Initial debug log
+            addDebugLog('System initialized and ready', 'success');
         });
     </script>
 </body>
