@@ -1,14 +1,13 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Buzzer Control</title>
+    <title>HomeSecure Control Panel</title>
     <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-database-compat.js"></script>
     <style>
         body {
-            font-family: Arial, sans-serif;
-            max-width: 500px;
-            margin: 0 auto;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
             padding: 20px;
             text-align: center;
             background-color: #f5f5f5;
@@ -16,6 +15,7 @@
             display: flex;
             justify-content: center;
             align-items: center;
+            transition: background-color 0.3s;
         }
         .container {
             background: white;
@@ -60,6 +60,10 @@
             background-color: #f44336;
             box-shadow: 0 4px 0 #c62828;
         }
+        .btn-alert {
+            background-color: #FF9800;
+            box-shadow: 0 4px 0 #F57C00;
+        }
         .status {
             margin: 25px 0 15px;
             padding: 15px;
@@ -72,9 +76,43 @@
             font-size: 14px;
             color: #666;
         }
+        /* Modal Styles */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+        }
+        .modal-content {
+            background-color: #fff;
+            margin: 15% auto;
+            padding: 25px;
+            border-radius: 10px;
+            width: 80%;
+            max-width: 500px;
+            text-align: center;
+            animation: modalFadeIn 0.3s;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+        }
+        @keyframes modalFadeIn {
+            from {opacity: 0; transform: translateY(-50px);}
+            to {opacity: 1; transform: translateY(0);}
+        }
+        .modal h2 {
+            color: #d32f2f;
+            margin-top: 0;
+        }
+        .modal-buttons {
+            margin: 25px 0 10px;
+        }
         @media (max-width: 480px) {
-            .container {
+            .container, .modal-content {
                 padding: 15px;
+                width: 90%;
             }
             .btn {
                 width: 100%;
@@ -85,86 +123,212 @@
 </head>
 <body>
     <div class="container">
-        <h1>Buzzer Control</h1>
+        <h1>HomeSecure</h1>
         
         <div class="control-panel">
-            <div>
-                <button id="buzzerOn" class="btn btn-on">Turn On</button>
-                <button id="buzzerOff" class="btn btn-off">Turn Off</button>
+            <div id="securityStatus" class="status">
+                Security System: <span id="securityState">DISARMED</span>
             </div>
-            <div class="status" id="buzzerStatus">
-                Buzzer: OFF
+            
+            <div>
+                <button id="armBtn" class="btn btn-on">Arm System</button>
+                <button id="disarmBtn" class="btn btn-off" disabled>Disarm System</button>
+            </div>
+            
+            <div class="status" id="alarmStatus">
+                Alarm: <span id="alarmState">INACTIVE</span>
+            </div>
+            
+            <div>
+                <button id="testAlarmBtn" class="btn btn-alert">Test Alarm</button>
             </div>
         </div>
         
         <div class="info">
-            Control your ESP32 buzzer remotely
+            <p>Status: <span id="connectionStatus">Connecting...</span></p>
+            <p>Last updated: <span id="lastUpdated">Never</span></p>
+        </div>
+    </div>
+
+    <!-- Motion Detected Modal -->
+    <div id="motionModal" class="modal">
+        <div class="modal-content">
+            <h2>🚨 Motion Detected!</h2>
+            <p>Possible intrusion detected at your property.</p>
+            <p><strong>Activate HomeSecure alarm?</strong></p>
+            <p><small>This will sound the alarm and notify authorities if configured.</small></p>
+            <div class="modal-buttons">
+                <button id="confirmAlarm" class="btn btn-alert" style="margin-right: 10px;">ACTIVATE ALARM</button>
+                <button id="dismissAlarm" class="btn btn-off">DISMISS</button>
+            </div>
+            <p id="countdown" style="margin: 10px 0 0; font-size: 0.9em; color: #666;">
+                Auto-dismiss in <span id="countdownNumber">30</span>s
+            </p>
         </div>
     </div>
 
     <script>
-        // Your web app's Firebase configuration
+        // Firebase configuration
         const firebaseConfig = {
-            apiKey: "AIzaSyCnHHJJXR56War7M4dMO_Cp577EKrwj9iM",
+            apiKey: "AIzaSyDkXq_9bLX5xUY4gTzRkHhLdW9X8JvK9Yw",
             authDomain: "home-83fb6.firebaseapp.com",
             databaseURL: "https://home-83fb6-default-rtdb.asia-southeast1.firebasedatabase.app",
             projectId: "home-83fb6",
-            storageBucket: "home-83fb6.firebasestorage.app",
-            messagingSenderId: "513285854026",
-            appId: "1:513285854026:web:e12215d6af0908274827b3",
-            measurementId: "G-LYWGGGRDN1"
+            storageBucket: "home-83fb6.appspot.com",
+            messagingSenderId: "123456789012",
+            appId: "1:123456789012:web:abc123def456"
         };
 
         // Initialize Firebase
         const app = firebase.initializeApp(firebaseConfig);
         const database = firebase.database();
+        const securityRef = database.ref('security');
 
         // DOM Elements
-        const buzzerOnBtn = document.getElementById('buzzerOn');
-        const buzzerOffBtn = document.getElementById('buzzerOff');
-        const buzzerStatus = document.getElementById('buzzerStatus');
+        const armBtn = document.getElementById('armBtn');
+        const disarmBtn = document.getElementById('disarmBtn');
+        const testAlarmBtn = document.getElementById('testAlarmBtn');
+        const securityState = document.getElementById('securityState');
+        const alarmState = document.getElementById('alarmState');
+        const connectionStatus = document.getElementById('connectionStatus');
+        const lastUpdated = document.getElementById('lastUpdated');
+        const motionModal = document.getElementById('motionModal');
+        const confirmAlarmBtn = document.getElementById('confirmAlarm');
+        const dismissAlarmBtn = document.getElementById('dismissAlarm');
+        const countdownElement = document.getElementById('countdownNumber');
 
-        // Set initial button states
-        buzzerOffBtn.disabled = true;
+        // Variables
+        let countdown;
+        let countdownValue = 30;
 
-        // Firebase reference
-        const buzzerRef = database.ref('buzzer/state');
-
-        // Listen for changes from Firebase
-        buzzerRef.on('value', (snapshot) => {
-            const isOn = snapshot.val() || false;
-            updateUI(isOn);
-        });
-
-        // Update UI based on buzzer state
-        function updateUI(isOn) {
-            if (isOn) {
-                buzzerOnBtn.disabled = true;
-                buzzerOffBtn.disabled = false;
-                buzzerStatus.textContent = 'Buzzer: ON';
-            } else {
-                buzzerOnBtn.disabled = false;
-                buzzerOffBtn.disabled = true;
-                buzzerStatus.textContent = 'Buzzer: OFF';
-            }
+        // Update UI based on security state
+        function updateSecurityUI(isArmed) {
+            securityState.textContent = isArmed ? 'ARMED' : 'DISARMED';
+            securityState.style.color = isArmed ? '#4CAF50' : '#f44336';
+            armBtn.disabled = isArmed;
+            disarmBtn.disabled = !isArmed;
+            document.body.style.backgroundColor = isArmed ? '#fff8f8' : '#f5f5f5';
         }
 
-        // Button click handlers
-        buzzerOnBtn.addEventListener('click', () => {
-            buzzerRef.set(true)
-                .catch((error) => {
-                    console.error('Error updating buzzer:', error);
-                    alert('Error turning on buzzer!');
-                });
+        // Update UI based on alarm state
+        function updateAlarmUI(isAlarmActive) {
+            alarmState.textContent = isAlarmActive ? 'ACTIVE' : 'INACTIVE';
+            alarmState.style.color = isAlarmActive ? '#f44336' : '#4CAF50';
+            document.body.style.backgroundColor = isAlarmActive ? '#ffebee' : (securityState.textContent === 'ARMED' ? '#fff8f8' : '#f5f5f5');
+        }
+
+        // Show motion alert modal
+        function showMotionAlert() {
+            // Reset countdown
+            countdownValue = 30;
+            countdownElement.textContent = countdownValue;
+            motionModal.style.display = 'block';
+            
+            // Start countdown
+            clearInterval(countdown);
+            countdown = setInterval(() => {
+                countdownValue--;
+                countdownElement.textContent = countdownValue;
+                
+                if (countdownValue <= 0) {
+                    clearInterval(countdown);
+                    motionModal.style.display = 'none';
+                    securityRef.update({ motionDetected: false });
+                }
+            }, 1000);
+        }
+
+        // Update last updated time
+        function updateLastUpdated() {
+            const now = new Date();
+            lastUpdated.textContent = now.toLocaleTimeString();
+        }
+
+        // Event Listeners
+        armBtn.addEventListener('click', () => {
+            securityRef.update({ 
+                armed: true,
+                alarm: false,
+                motionDetected: false
+            });
         });
 
-        buzzerOffBtn.addEventListener('click', () => {
-            buzzerRef.set(false)
-                .catch((error) => {
-                    console.error('Error updating buzzer:', error);
-                    alert('Error turning off buzzer!');
-                });
+        disarmBtn.addEventListener('click', () => {
+            securityRef.update({ 
+                armed: false,
+                alarm: false,
+                motionDetected: false
+            });
         });
+
+        testAlarmBtn.addEventListener('click', () => {
+            const isArmed = securityState.textContent === 'ARMED';
+            if (isArmed) {
+                if (confirm('Test the alarm? This will sound the siren for 5 seconds.')) {
+                    // Set test mode in Firebase
+                    database.ref('testMode').set(true);
+                    
+                    // Turn on alarm for 5 seconds
+                    securityRef.update({ alarm: true });
+                    setTimeout(() => {
+                        securityRef.update({ alarm: false });
+                        database.ref('testMode').set(false);
+                    }, 5000);
+                }
+            } else {
+                alert('Please arm the system first before testing.');
+            }
+        });
+
+        confirmAlarmBtn.addEventListener('click', () => {
+            securityRef.update({
+                alarm: true,
+                motionDetected: false
+            });
+            motionModal.style.display = 'none';
+            clearInterval(countdown);
+        });
+
+        dismissAlarmBtn.addEventListener('click', () => {
+            securityRef.update({ motionDetected: false });
+            motionModal.style.display = 'none';
+            clearInterval(countdown);
+        });
+
+        // Firebase Listeners
+        securityRef.child('armed').on('value', (snapshot) => {
+            const isArmed = snapshot.val() || false;
+            updateSecurityUI(isArmed);
+            updateLastUpdated();
+        });
+
+        securityRef.child('alarm').on('value', (snapshot) => {
+            const isAlarmActive = snapshot.val() || false;
+            updateAlarmUI(isAlarmActive);
+            updateLastUpdated();
+        });
+
+        securityRef.child('motionDetected').on('value', (snapshot) => {
+            const motionDetected = snapshot.val() || false;
+            if (motionDetected && securityState.textContent === 'ARMED') {
+                showMotionAlert();
+            }
+        });
+
+        // Connection monitoring
+        database.ref('.info/connected').on('value', (snapshot) => {
+            const isConnected = snapshot.val();
+            connectionStatus.textContent = isConnected ? 'Connected to Firebase' : 'Disconnected';
+            connectionStatus.style.color = isConnected ? '#4CAF50' : '#f44336';
+            
+            if (isConnected) {
+                updateLastUpdated();
+            }
+        });
+
+        // Initial UI update
+        updateSecurityUI(false);
+        updateAlarmUI(false);
     </script>
 </body>
 </html>
