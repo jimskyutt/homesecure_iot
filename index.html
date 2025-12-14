@@ -1,944 +1,170 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>HomeSecure IoT Control Panel</title>
+    <title>Buzzer Control</title>
+    <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-database-compat.js"></script>
     <style>
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            max-width: 800px;
+            font-family: Arial, sans-serif;
+            max-width: 500px;
             margin: 0 auto;
             padding: 20px;
+            text-align: center;
             background-color: #f5f5f5;
-            color: #333;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
         }
         .container {
             background: white;
-            border-radius: 10px;
-            padding: 20px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            width: 100%;
+            max-width: 500px;
         }
         h1 {
-            color: #2c3e50;
-            text-align: center;
+            color: #333;
             margin-bottom: 30px;
-        }
-        .control-panel {
-            display: flex;
-            flex-direction: column;
-            gap: 20px;
-        }
-        .control-group {
-            background: #f8f9fa;
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-        }
-        h2 {
-            color: #34495e;
-            margin-top: 0;
-            padding-bottom: 10px;
-            border-bottom: 1px solid #eee;
+            font-size: 2em;
         }
         .btn {
-            padding: 12px 24px;
-            border: none;
-            border-radius: 6px;
+            padding: 15px 30px;
             font-size: 16px;
-            font-weight: 600;
+            font-weight: bold;
+            margin: 10px;
+            border: none;
+            border-radius: 8px;
+            color: white;
             cursor: pointer;
             transition: all 0.3s;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            gap: 8px;
+            min-width: 160px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        .btn:active {
+            transform: scale(0.95);
         }
         .btn:disabled {
             opacity: 0.6;
             cursor: not-allowed;
+            transform: none !important;
         }
-        .btn-on {
-            background-color: #2ecc71;
-            color: white;
+        .btn-on { 
+            background-color: #4CAF50;
+            box-shadow: 0 4px 0 #2E7D32;
         }
-        .btn-on:hover:not(:disabled) {
-            background-color: #27ae60;
-        }
-        .btn-off {
-            background-color: #e74c3c;
-            color: white;
-        }
-        .btn-off:hover:not(:disabled) {
-            background-color: #c0392b;
-        }
-        .btn-alarm {
-            background-color: #f39c12;
-            color: white;
-        }
-        .btn-alarm:hover:not(:disabled) {
-            background-color: #d35400;
+        .btn-off { 
+            background-color: #f44336;
+            box-shadow: 0 4px 0 #c62828;
         }
         .status {
-            margin-top: 10px;
-            padding: 10px;
-            border-radius: 4px;
-            font-weight: 500;
-        }
-        .status-on {
-            background-color: #d4edda;
-            color: #155724;
-            border-left: 4px solid #28a745;
-        }
-        .status-off {
-            background-color: #f8d7da;
-            color: #721c24;
-            border-left: 4px solid #dc3545;
-        }
-        .status-alarm {
-            background-color: #fff3cd;
-            color: #856404;
-            border-left: 4px solid #ffc107;
-        }
-        .loading {
-            display: inline-block;
-            width: 16px;
-            height: 16px;
-            border: 2px solid rgba(255,255,255,0.3);
-            border-radius: 50%;
-            border-top-color: #fff;
-            animation: spin 1s ease-in-out infinite;
-            margin-left: 8px;
-        }
-        @keyframes spin {
-            to { transform: rotate(360deg); }
-        }
-        .debug-panel {
-            margin-top: 30px;
-            background: #2c3e50;
-            color: #ecf0f1;
-            border-radius: 8px;
+            margin: 25px 0 15px;
             padding: 15px;
-            font-family: monospace;
-            max-height: 200px;
-            overflow-y: auto;
-        }
-        .debug-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 10px;
-        }
-        .debug-title {
-            margin: 0;
-            color: #ecf0f1;
-            font-size: 16px;
-        }
-        .debug-clear {
-            background: #e74c3c;
-            color: white;
-            border: none;
-            padding: 5px 10px;
-            border-radius: 4px;
-            cursor: pointer;
-        }
-        .debug-log {
-            margin: 0;
-            line-height: 1.5;
-            font-size: 14px;
-        }
-        .log-entry {
-            margin: 5px 0;
-            padding: 5px;
-            border-radius: 3px;
-        }
-        .log-info {
-            color: #3498db;
-        }
-        .log-success {
-            color: #2ecc71;
-        }
-        .log-error {
-            color: #e74c3c;
-        }
-        .log-warning {
-            color: #f39c12;
-        }
-
-        /* Modal Styles */
-        .modal {
-            display: none;
-            position: fixed;
-            z-index: 1000;
-            left: 0;
-            top: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(0, 0, 0, 0.7);
-            align-items: center;
-            justify-content: center;
-        }
-
-        .modal.show {
-            display: flex;
-        }
-
-        .modal-content {
-            background: white;
-            padding: 25px;
-            border-radius: 10px;
-            max-width: 400px;
-            width: 90%;
-            text-align: center;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
-            animation: modalFadeIn 0.3s;
-        }
-
-        @keyframes modalFadeIn {
-            from { opacity: 0; transform: translateY(-20px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-
-        .modal h3 {
-            color: #e74c3c;
-            margin-top: 0;
-            font-size: 24px;
-            margin-bottom: 15px;
-        }
-
-        .modal p {
-            margin-bottom: 25px;
-            line-height: 1.5;
-            color: #555;
-        }
-
-        .modal-buttons {
-            display: flex;
-            gap: 15px;
-            justify-content: center;
-            margin-top: 20px;
-        }
-
-        .btn-modal {
-            padding: 12px 25px;
-            border: none;
-            border-radius: 6px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.3s;
-            font-size: 15px;
-        }
-
-        .btn-modal-primary {
-            background-color: #e74c3c;
-            color: white;
-        }
-
-        .btn-modal-primary:hover {
-            background-color: #c0392b;
-            transform: translateY(-2px);
-        }
-
-        .btn-modal-secondary {
-            background-color: #95a5a6;
-            color: white;
-        }
-
-        .btn-modal-secondary:hover {
-            background-color: #7f8c8d;
-            transform: translateY(-2px);
-        }
-
-        /* Alarm Status */
-        #alarmStatus {
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            background: rgba(231, 76, 60, 0.9);
-            color: white;
-            padding: 12px 20px;
-            border-radius: 30px;
-            display: none;
-            align-items: center;
-            gap: 10px;
-            z-index: 1001;
-            font-weight: 600;
-            box-shadow: 0 4px 15px rgba(231, 76, 60, 0.3);
-        }
-
-        #alarmStatus.active {
-            display: flex;
-            animation: pulse 1.5s infinite;
-        }
-
-        @keyframes pulse {
-            0% { box-shadow: 0 0 0 0 rgba(231, 76, 60, 0.7); }
-            70% { box-shadow: 0 0 0 15px rgba(231, 76, 60, 0); }
-            100% { box-shadow: 0 0 0 0 rgba(231, 76, 60, 0); }
-        }
-
-        #stopAlarm {
-            margin-left: 10px;
-            background: white;
-            border: none;
-            color: #e74c3c;
-            border-radius: 15px;
-            padding: 5px 12px;
-            cursor: pointer;
-            font-size: 13px;
-            font-weight: bold;
-            transition: all 0.2s;
-        }
-
-        #stopAlarm:hover {
-            transform: scale(1.05);
-            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
-        }
-
-        /* Toast Notifications */
-        .toast {
-            position: fixed;
-            bottom: 20px;
-            right: 20px;
-            background: #2c3e50;
-            color: white;
-            padding: 15px 25px;
             border-radius: 8px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            transform: translateY(100px);
-            opacity: 0;
-            transition: all 0.3s ease;
-            z-index: 1000;
-            max-width: 320px;
+            background-color: #f0f7ff;
+            font-size: 18px;
         }
-
-        .toast.show {
-            transform: translateY(0);
-            opacity: 1;
+        .info {
+            margin-top: 30px;
+            font-size: 14px;
+            color: #666;
         }
-
-        .toast.success {
-            background: #27ae60;
-        }
-
-        .toast.error {
-            background: #e74c3c;
-        }
-
-        .toast.warning {
-            background: #f39c12;
-        }
-
-        .toast.info {
-            background: #3498db;
-        }
-
-        /* Responsive Design */
-        @media (max-width: 768px) {
-            .control-panel {
-                gap: 15px;
-            }
-            
-            .btn {
-                padding: 10px 15px;
-                font-size: 14px;
-            }
-            
-            .debug-panel {
-                max-height: 150px;
-            }
-        }
-
         @media (max-width: 480px) {
-            body {
-                padding: 10px;
+            .container {
+                padding: 15px;
             }
-            
-            .modal-buttons {
-                flex-direction: column;
-                gap: 10px;
-            }
-            
-            .btn-modal {
+            .btn {
                 width: 100%;
+                margin: 8px 0;
             }
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>🏠 HomeSecure IoT Control Panel</h1>
+        <h1>Buzzer Control</h1>
         
         <div class="control-panel">
-            <div class="control-group">
-                <h2>Servo Control</h2>
-                <div>
-                    <button id="btnOn" class="btn btn-on">
-                        <span id="btnTextOn">Turn ON (Auto-Sweep)</span>
-                        <span id="loadingOn" class="loading" style="display: none;"></span>
-                    </button>
-                    <button id="btnOff" class="btn btn-off">
-                        <span id="btnTextOff">Turn OFF (0°)</span>
-                        <span id="loadingOff" class="loading" style="display: none;"></span>
-                    </button>
-                </div>
-                <div id="servoStatus" class="status status-off">Status: OFF</div>
-                <div id="servoMode">Mode: Auto-Sweep (0° to 180°)</div>
+            <div>
+                <button id="buzzerOn" class="btn btn-on">Turn On</button>
+                <button id="buzzerOff" class="btn btn-off">Turn Off</button>
             </div>
-
-            <div class="control-group">
-                <h2>Security System</h2>
-                <div>
-                    <button id="btnArmAlarm" class="btn btn-alarm">
-                        <span id="btnTextArm">Arm Alarm System</span>
-                        <span id="loadingAlarm" class="loading" style="display: none;"></span>
-                    </button>
-                </div>
-                <div id="alarmStatusText" class="status status-off">Status: Disarmed</div>
-                <div id="motionStatus">Motion: No detection</div>
-            </div>
-
-            <div class="control-group">
-                <h2>System Status</h2>
-                <div id="connectionStatus">🔴 Disconnected from server</div>
-                <div id="lastUpdate">Last update: Never</div>
+            <div class="status" id="buzzerStatus">
+                Buzzer: OFF
             </div>
         </div>
-
-        <div class="debug-panel">
-            <div class="debug-header">
-                <h3 class="debug-title">System Logs</h3>
-                <button id="clearLogs" class="debug-clear">Clear Logs</button>
-            </div>
-            <div id="debugLogs" class="debug-log"></div>
+        
+        <div class="info">
+            Control your ESP32 buzzer remotely
         </div>
-    </div>
-
-    <!-- Motion Detection Modal -->
-    <div id="motionModal" class="modal">
-        <div class="modal-content">
-            <h3>🚨 Motion Detected!</h3>
-            <p>An intruder has been detected at your home. Would you like to activate the alarm system?</p>
-            <div class="modal-buttons">
-                <button id="activateAlarm" class="btn-modal btn-modal-primary">Activate Alarm</button>
-                <button id="dismissAlarm" class="btn-modal btn-modal-secondary">Dismiss</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Alarm Status Indicator -->
-    <div id="alarmStatus">
-        <span>ALARM ACTIVE</span>
-        <button id="stopAlarm">STOP ALARM</button>
     </div>
 
     <script>
-        // Firebase configuration
-        const FIREBASE_URL = "https://home-83fb6-default-rtdb.asia-southeast1.firebasedatabase.app/servo.json";
-        const FIREBASE_MOTION_URL = "https://home-83fb6-default-rtdb.asia-southeast1.firebasedatabase.app/motion.json";
-        const FIREBASE_ALARM_URL = "https://home-83fb6-default-rtdb.asia-southeast1.firebasedatabase.app/alarm.json";
-        
-        // DOM elements
-        const btnOn = document.getElementById('btnOn');
-        const btnOff = document.getElementById('btnOff');
-        const btnArmAlarm = document.getElementById('btnArmAlarm');
-        const btnTextOn = document.getElementById('btnTextOn');
-        const btnTextOff = document.getElementById('btnTextOff');
-        const btnTextArm = document.getElementById('btnTextArm');
-        const loadingOn = document.getElementById('loadingOn');
-        const loadingOff = document.getElementById('loadingOff');
-        const loadingAlarm = document.getElementById('loadingAlarm');
-        const debugLogs = document.getElementById('debugLogs');
-        const clearLogsBtn = document.getElementById('clearLogs');
-        const connectionStatus = document.getElementById('connectionStatus');
-        const motionStatus = document.getElementById('motionStatus');
-        const servoStatus = document.getElementById('servoStatus');
-        const alarmStatusText = document.getElementById('alarmStatusText');
-        const lastUpdate = document.getElementById('lastUpdate');
-        
-        // Modal elements
-        const motionModal = document.getElementById('motionModal');
-        const activateAlarmBtn = document.getElementById('activateAlarm');
-        const dismissAlarmBtn = document.getElementById('dismissAlarm');
-        const alarmStatus = document.getElementById('alarmStatus');
-        const stopAlarmBtn = document.getElementById('stopAlarm');
-        
-        // State variables
-        let currentState = 'off';
-        let isAlarmArmed = false;
-        let isAlarmActive = false;
-        let isConnected = false;
-        let isPolling = false;
-        let lastMotionTimestamp = 0;
-        let alarmSound = null;
-        let connectionCheckInterval;
-        
-        // Initialize
-        document.addEventListener('DOMContentLoaded', () => {
-            addDebugLog('System initialized', 'info');
-            checkConnection();
-            startConnectionCheck();
-            checkState();
-            pollMotionDetection();
-            initAlarmSound();
+        // Your web app's Firebase configuration
+        const firebaseConfig = {
+            apiKey: "AIzaSyCnHHJJXR56War7M4dMO_Cp577EKrwj9iM",
+            authDomain: "home-83fb6.firebaseapp.com",
+            databaseURL: "https://home-83fb6-default-rtdb.asia-southeast1.firebasedatabase.app",
+            projectId: "home-83fb6",
+            storageBucket: "home-83fb6.firebasestorage.app",
+            messagingSenderId: "513285854026",
+            appId: "1:513285854026:web:e12215d6af0908274827b3",
+            measurementId: "G-LYWGGGRDN1"
+        };
+
+        // Initialize Firebase
+        const app = firebase.initializeApp(firebaseConfig);
+        const database = firebase.database();
+
+        // DOM Elements
+        const buzzerOnBtn = document.getElementById('buzzerOn');
+        const buzzerOffBtn = document.getElementById('buzzerOff');
+        const buzzerStatus = document.getElementById('buzzerStatus');
+
+        // Set initial button states
+        buzzerOffBtn.disabled = true;
+
+        // Firebase reference
+        const buzzerRef = database.ref('buzzer/state');
+
+        // Listen for changes from Firebase
+        buzzerRef.on('value', (snapshot) => {
+            const isOn = snapshot.val() || false;
+            updateUI(isOn);
         });
-        
-        // Event listeners
-        btnOn.addEventListener('click', () => updateServo('on'));
-        btnOff.addEventListener('click', () => updateServo('off'));
-        btnArmAlarm.addEventListener('click', toggleAlarm);
-        clearLogsBtn.addEventListener('click', clearLogs);
-        activateAlarmBtn.addEventListener('click', activateAlarm);
-        dismissAlarmBtn.addEventListener('click', dismissAlarm);
-        stopAlarmBtn.addEventListener('click', stopAlarm);
-        
-        // Update servo state (on/off)
-        async function updateServo(state) {
-            if (currentState === state) return;
-            
-            const button = state === 'on' ? btnOn : btnOff;
-            const buttonText = state === 'on' ? btnTextOn : btnTextOff;
-            const loading = state === 'on' ? loadingOn : loadingOff;
-            
-            button.disabled = true;
-            buttonText.textContent = state === 'on' ? 'Starting...' : 'Stopping...';
-            loading.style.display = 'inline-block';
-            
-            try {
-                const response = await fetch(FIREBASE_URL, {
-                    method: 'PATCH',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ 
-                        state: state,
-                        timestamp: Date.now()
-                    })
-                });
 
-                if (response.ok) {
-                    currentState = state;
-                    updateUI(state);
-                    updateButtonStates(state, false);
-                    
-                    if (state === 'on') {
-                        addDebugLog('Auto-sweep movement started', 'success');
-                        showToast('Auto-sweep movement started', 'success');
-                    } else {
-                        addDebugLog('Servo turned OFF', 'info');
-                        showToast('Servo stopped at 0°', 'info');
-                    }
-                } else {
-                    throw new Error(`HTTP error: ${response.status}`);
-                }
-            } catch (error) {
-                console.error('Error:', error);
-                updateConnectionStatus(false);
-                addDebugLog(`Error: ${error.message}`, 'error');
-                showToast('Failed to update servo', 'error');
-            } finally {
-                loading.style.display = 'none';
-                updateButtonStates(currentState, isAlarmArmed);
+        // Update UI based on buzzer state
+        function updateUI(isOn) {
+            if (isOn) {
+                buzzerOnBtn.disabled = true;
+                buzzerOffBtn.disabled = false;
+                buzzerStatus.textContent = 'Buzzer: ON';
+            } else {
+                buzzerOnBtn.disabled = false;
+                buzzerOffBtn.disabled = true;
+                buzzerStatus.textContent = 'Buzzer: OFF';
             }
         }
-        
-        // Toggle alarm system
-        async function toggleAlarm() {
-            isAlarmArmed = !isAlarmArmed;
-            updateAlarmUI(isAlarmArmed);
-            
-            try {
-                const response = await fetch(FIREBASE_ALARM_URL, {
-                    method: 'PATCH',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ 
-                        armed: isAlarmArmed,
-                        timestamp: Date.now()
-                    })
-                });
 
-                if (response.ok) {
-                    if (isAlarmArmed) {
-                        addDebugLog('Alarm system ARMED', 'warning');
-                        showToast('Alarm system armed', 'warning');
-                    } else {
-                        addDebugLog('Alarm system DISARMED', 'info');
-                        showToast('Alarm system disarmed', 'info');
-                        // Also stop the alarm if it's active
-                        if (isAlarmActive) {
-                            stopAlarm();
-                        }
-                    }
-                } else {
-                    throw new Error(`HTTP error: ${response.status}`);
-                }
-            } catch (error) {
-                console.error('Error:', error);
-                updateConnectionStatus(false);
-                addDebugLog(`Error: ${error.message}`, 'error');
-                showToast('Failed to update alarm system', 'error');
-                // Revert UI on error
-                isAlarmArmed = !isAlarmArmed;
-                updateAlarmUI(isAlarmArmed);
-            }
-        }
-        
-        // Activate alarm (when motion is detected)
-        async function activateAlarm() {
-            if (!isAlarmArmed) return;
-            
-            isAlarmActive = true;
-            motionModal.classList.remove('show');
-            alarmStatus.classList.add('active');
-            
-            if (alarmSound) {
-                alarmSound.play();
-            }
-            
-            addDebugLog('ALARM TRIGGERED! Motion detected', 'error');
-            showToast('🚨 INTRUDER ALERT!', 'error');
-            
-            try {
-                await fetch(FIREBASE_ALARM_URL, {
-                    method: 'PATCH',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ 
-                        triggered: true,
-                        timestamp: Date.now()
-                    })
+        // Button click handlers
+        buzzerOnBtn.addEventListener('click', () => {
+            buzzerRef.set(true)
+                .catch((error) => {
+                    console.error('Error updating buzzer:', error);
+                    alert('Error turning on buzzer!');
                 });
-            } catch (error) {
-                console.error('Error triggering alarm:', error);
-                addDebugLog(`Alarm trigger error: ${error.message}`, 'error');
-            }
-        }
-        
-        // Dismiss alarm (when false alarm)
-        function dismissAlarm() {
-            motionModal.classList.remove('show');
-            addDebugLog('Motion alert dismissed', 'info');
-            showToast('Motion alert dismissed', 'info');
-        }
-        
-        // Stop alarm manually
-        async function stopAlarm() {
-            if (!isAlarmActive) return;
-            
-            isAlarmActive = false;
-            alarmStatus.classList.remove('active');
-            
-            if (alarmSound) {
-                alarmSound.stop();
-            }
-            
-            addDebugLog('Alarm manually stopped', 'info');
-            showToast('Alarm stopped', 'success');
-            
-            try {
-                await fetch(FIREBASE_ALARM_URL, {
-                    method: 'PATCH',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ 
-                        triggered: false,
-                        timestamp: Date.now()
-                    })
+        });
+
+        buzzerOffBtn.addEventListener('click', () => {
+            buzzerRef.set(false)
+                .catch((error) => {
+                    console.error('Error updating buzzer:', error);
+                    alert('Error turning off buzzer!');
                 });
-            } catch (error) {
-                console.error('Error stopping alarm:', error);
-                addDebugLog(`Alarm stop error: ${error.message}`, 'error');
-            }
-        }
-        
-        // Initialize alarm sound
-        function initAlarmSound() {
-            try {
-                // Create audio context
-                const AudioContext = window.AudioContext || window.webkitAudioContext;
-                const audioCtx = new AudioContext();
-                const oscillator = audioCtx.createOscillator();
-                const gainNode = audioCtx.createGain();
-                
-                oscillator.type = 'sine';
-                oscillator.frequency.setValueAtTime(1000, audioCtx.currentTime);
-                gainNode.gain.setValueAtTime(0, audioCtx.currentTime);
-                
-                oscillator.connect(gainNode);
-                gainNode.connect(audioCtx.destination);
-                
-                oscillator.start();
-                
-                alarmSound = {
-                    play: () => {
-                        gainNode.gain.linearRampToValueAtTime(0.5, audioCtx.currentTime + 0.1);
-                        oscillator.frequency.setValueAtTime(1000, audioCtx.currentTime);
-                    },
-                    stop: () => {
-                        gainNode.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.5);
-                    },
-                    isPlaying: () => gainNode.gain.value > 0
-                };
-                
-                // Resume audio context on user interaction
-                document.addEventListener('click', () => {
-                    if (audioCtx.state === 'suspended') {
-                        audioCtx.resume();
-                    }
-                }, { once: true });
-                
-                addDebugLog('Alarm sound initialized', 'success');
-            } catch (error) {
-                console.error('Error initializing alarm sound:', error);
-                addDebugLog('Warning: Could not initialize alarm sound', 'warning');
-            }
-        }
-        
-        // Poll motion detection
-        async function pollMotionDetection() {
-            if (isPolling) return;
-            isPolling = true;
-            
-            try {
-                const response = await fetch(FIREBASE_MOTION_URL);
-                const data = await response.json();
-                
-                if (data && data.detected) {
-                    const currentTime = Date.now();
-                    // Only show notification if it's a new detection (within last 5 seconds)
-                    if (currentTime - lastMotionTimestamp > 5000) {
-                        updateMotionStatus(true);
-                        lastMotionTimestamp = currentTime;
-                        
-                        // Show modal if alarm is armed
-                        if (isAlarmArmed && !isAlarmActive) {
-                            motionModal.classList.add('show');
-                        }
-                        
-                        // Clear the motion flag after a delay
-                        setTimeout(clearMotionFlag, 5000);
-                        
-                        // Reset motion status after 10 seconds
-                        setTimeout(() => {
-                            updateMotionStatus(false);
-                        }, 10000);
-                    }
-                }
-            } catch (error) {
-                console.error('Error checking motion:', error);
-                addDebugLog('Error checking motion: ' + error.message, 'error');
-            } finally {
-                isPolling = false;
-            }
-            
-            // Check again after 1 second
-            setTimeout(pollMotionDetection, 1000);
-        }
-        
-        // Clear motion detection flag
-        async function clearMotionFlag() {
-            try {
-                await fetch(FIREBASE_MOTION_URL, {
-                    method: 'PATCH',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ 
-                        detected: false,
-                        timestamp: Date.now()
-                    })
-                });
-            } catch (error) {
-                console.error('Error clearing motion flag:', error);
-                addDebugLog('Error clearing motion flag: ' + error.message, 'error');
-            }
-        }
-        
-        // Check current state from Firebase
-        async function checkState() {
-            try {
-                const [servoRes, alarmRes] = await Promise.all([
-                    fetch(FIREBASE_URL),
-                    fetch(FIREBASE_ALARM_URL)
-                ]);
-                
-                if (servoRes.ok) {
-                    const servoData = await servoRes.json();
-                    if (servoData && servoData.state) {
-                        currentState = servoData.state;
-                        updateUI(currentState);
-                        updateButtonStates(currentState, isAlarmArmed);
-                    }
-                }
-                
-                if (alarmRes.ok) {
-                    const alarmData = await alarmRes.json();
-                    if (alarmData) {
-                        isAlarmArmed = !!alarmData.armed;
-                        isAlarmActive = !!alarmData.triggered;
-                        updateAlarmUI(isAlarmArmed);
-                        
-                        if (isAlarmActive) {
-                            alarmStatus.classList.add('active');
-                            if (alarmSound) {
-                                alarmSound.play();
-                            }
-                        } else {
-                            alarmStatus.classList.remove('active');
-                            if (alarmSound) {
-                                alarmSound.stop();
-                            }
-                        }
-                    }
-                }
-                
-                updateLastUpdateTime();
-            } catch (error) {
-                console.error('Error checking state:', error);
-                addDebugLog('Error checking state: ' + error.message, 'error');
-            }
-            
-            // Check again after 5 seconds
-            setTimeout(checkState, 5000);
-        }
-        
-        // Update UI based on servo state
-        function updateUI(state) {
-            const statusElement = document.getElementById('servoStatus');
-            if (state === 'on') {
-                statusElement.textContent = 'Status: ON (Auto-Sweep)';
-                statusElement.className = 'status status-on';
-            } else {
-                statusElement.textContent = 'Status: OFF (0°)';
-                statusElement.className = 'status status-off';
-            }
-        }
-        
-        // Update alarm UI
-        function updateAlarmUI(isArmed) {
-            const statusElement = document.getElementById('alarmStatusText');
-            const buttonElement = document.getElementById('btnArmAlarm');
-            const buttonText = document.getElementById('btnTextArm');
-            
-            if (isArmed) {
-                statusElement.textContent = 'Status: ARMED';
-                statusElement.className = 'status status-on';
-                buttonElement.className = 'btn btn-alarm';
-                buttonText.textContent = 'Disarm System';
-            } else {
-                statusElement.textContent = 'Status: DISARMED';
-                statusElement.className = 'status status-off';
-                buttonElement.className = 'btn btn-secondary';
-                buttonText.textContent = 'Arm System';
-            }
-        }
-        
-        // Update motion status
-        function updateMotionStatus(detected) {
-            const motionElement = document.getElementById('motionStatus');
-            if (detected) {
-                motionElement.textContent = 'Motion: DETECTED!';
-                motionElement.className = 'status status-alarm';
-            } else {
-                motionElement.textContent = 'Motion: No detection';
-                motionElement.className = 'status';
-            }
-        }
-        
-        // Update button states
-        function updateButtonStates(servoState, alarmArmed) {
-            btnOn.disabled = servoState === 'on';
-            btnOff.disabled = servoState === 'off';
-            btnArmAlarm.disabled = false;
-            
-            if (servoState === 'on') {
-                btnTextOn.textContent = 'Auto-Sweep ON';
-                btnTextOff.textContent = 'Turn OFF (0°)';
-            } else {
-                btnTextOn.textContent = 'Turn ON (Auto-Sweep)';
-                btnTextOff.textContent = 'Servo OFF';
-            }
-        }
-        
-        // Update connection status
-        function updateConnectionStatus(connected) {
-            isConnected = connected;
-            const statusElement = document.getElementById('connectionStatus');
-            
-            if (connected) {
-                statusElement.textContent = '🟢 Connected to server';
-                statusElement.className = 'status status-on';
-            } else {
-                statusElement.textContent = '🔴 Disconnected from server';
-                statusElement.className = 'status status-off';
-            }
-        }
-        
-        // Update last update time
-        function updateLastUpdateTime() {
-            const now = new Date();
-            const timeString = now.toLocaleTimeString();
-            const dateString = now.toLocaleDateString();
-            lastUpdate.textContent = `Last update: ${dateString} ${timeString}`;
-        }
-        
-        // Check server connection
-        async function checkConnection() {
-            try {
-                const response = await fetch(FIREBASE_URL);
-                updateConnectionStatus(response.ok);
-                return response.ok;
-            } catch (error) {
-                updateConnectionStatus(false);
-                return false;
-            }
-        }
-        
-        // Start connection check interval
-        function startConnectionCheck() {
-            // Initial check
-            checkConnection();
-            
-            // Check every 30 seconds
-            connectionCheckInterval = setInterval(() => {
-                checkConnection();
-            }, 30000);
-        }
-        
-        // Add message to debug log
-        function addDebugLog(message, type = 'info') {
-            const now = new Date();
-            const timeString = now.toLocaleTimeString();
-            const logEntry = document.createElement('div');
-            logEntry.className = `log-entry log-${type}`;
-            logEntry.innerHTML = `<span class="log-time">[${timeString}]</span> <span class="log-message">${message}</span>`;
-            debugLogs.appendChild(logEntry);
-            debugLogs.scrollTop = debugLogs.scrollHeight;
-        }
-        
-        // Clear debug logs
-        function clearLogs() {
-            debugLogs.innerHTML = '';
-            addDebugLog('Logs cleared', 'info');
-        }
-        
-        // Show toast notification
-        function showToast(message, type = 'info') {
-            const toast = document.createElement('div');
-            toast.className = `toast ${type}`;
-            toast.innerHTML = message;
-            document.body.appendChild(toast);
-            
-            // Add show class
-            setTimeout(() => {
-                toast.classList.add('show');
-            }, 100);
-            
-            // Remove after 3 seconds
-            setTimeout(() => {
-                toast.classList.remove('show');
-                setTimeout(() => {
-                    document.body.removeChild(toast);
-                }, 300);
-            }, 3000);
-        }
+        });
     </script>
 </body>
 </html>
