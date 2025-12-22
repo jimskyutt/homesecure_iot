@@ -3,9 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Security System Control Panel</title>
+    <title>Smart Home Security System</title>
     <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-database-compat.js"></script>
     <style>
         :root {
             --primary: #4361ee;
@@ -34,7 +36,7 @@
         }
 
         .container {
-            max-width: 1000px;
+            max-width: 1200px;
             margin: 0 auto;
             padding: 2rem 1rem;
         }
@@ -42,7 +44,7 @@
         header {
             text-align: center;
             margin-bottom: 2rem;
-            padding: 1rem;
+            padding: 1.5rem;
             background: white;
             border-radius: var(--border-radius);
             box-shadow: var(--box-shadow);
@@ -75,14 +77,9 @@
             color: var(--danger);
         }
 
-        .status-warning {
-            background-color: rgba(255, 190, 11, 0.1);
-            color: #d4a000;
-        }
-
         .dashboard {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            grid-template-columns: repeat(4, 1fr);
             gap: 1.5rem;
             margin-bottom: 2rem;
         }
@@ -107,6 +104,10 @@
 
         .card.warning {
             border-top-color: var(--warning);
+        }
+
+        .card.success {
+            border-top-color: var(--success);
         }
 
         .card-header {
@@ -193,6 +194,16 @@
             transform: translateY(-2px);
         }
 
+        .btn-warning {
+            background-color: var(--warning);
+            color: white;
+        }
+
+        .btn-warning:hover:not(:disabled) {
+            background-color: #d4a000;
+            transform: translateY(-2px);
+        }
+
         .btn-group {
             display: flex;
             gap: 0.8rem;
@@ -240,15 +251,13 @@
             font-weight: 500;
         }
 
-        /* Panic Button */
         .panic-container {
             grid-column: 1 / -1;
             text-align: center;
             margin-top: 1rem;
         }
 
-        #panicBtn {
-            background: linear-gradient(135deg, #ff4d4d, #ff1a1a);
+        #stopAllBtn {
             color: white;
             font-size: 1.2rem;
             font-weight: 600;
@@ -264,29 +273,144 @@
             align-items: center;
             justify-content: center;
             gap: 0.8rem;
-            box-shadow: 0 4px 15px rgba(239, 35, 60, 0.3);
+            background: linear-gradient(135deg, #06d6a0, #05b388);
+            box-shadow: 0 4px 15px rgba(6, 214, 160, 0.3);
         }
 
-        #panicBtn:hover:not(:disabled) {
+        #stopAllBtn:hover:not(:disabled) {
             transform: translateY(-3px);
             box-shadow: 0 6px 20px rgba(239, 35, 60, 0.4);
         }
-
-        #panicBtn:active:not(:disabled) {
-            transform: translateY(1px);
+        .log-card {
+            grid-column: 1 / -1;
         }
 
-        .panic-active {
-            animation: pulse 1.5s infinite;
+        .log-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 1rem;
         }
 
-        @keyframes pulse {
-            0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(239, 35, 60, 0.7); }
-            70% { transform: scale(1.02); box-shadow: 0 0 0 15px rgba(239, 35, 60, 0); }
-            100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(239, 35, 60, 0); }
+        .table-wrapper {
+            max-height: 500px;
+            overflow-y: auto;
+            border-radius: 8px;
         }
 
-        /* Responsive Design */
+        .table-wrapper::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .table-wrapper::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 8px;
+        }
+
+        .table-wrapper::-webkit-scrollbar-thumb {
+            background: var(--gray);
+            border-radius: 8px;
+        }
+
+        .table-wrapper::-webkit-scrollbar-thumb:hover {
+            background: var(--dark);
+        }
+
+        .log-table thead {
+            background-color: var(--dark);
+            color: white;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+
+        .log-table th {
+            padding: 1rem;
+            text-align: left;
+            font-weight: 600;
+        }
+
+        .log-table td {
+            padding: 0.8rem 1rem;
+            border-bottom: 1px solid #eee;
+        }
+
+        .log-table tbody tr:hover {
+            background-color: #f8f9fa;
+        }
+
+        .event-motor { color: #4361ee; font-weight: bold; }
+        .event-buzzer { color: #ffbe0b; font-weight: bold; }
+        .event-relay { color: #ef233c; font-weight: bold; }
+        .event-motion { color: #9b59b6; font-weight: bold; }
+        .event-all { color: #06d6a0; font-weight: bold; }
+        .event-alarm { color: #c41e3a; font-weight: bold; }
+
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.6);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .modal-overlay.show {
+            display: flex;
+        }
+
+        .modal-content {
+            background: white;
+            border-radius: var(--border-radius);
+            padding: 2rem;
+            max-width: 500px;
+            width: 90%;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+            animation: slideIn 0.3s ease;
+        }
+
+        @keyframes slideIn {
+            from {
+                transform: translateY(-50px);
+                opacity: 0;
+            }
+            to {
+                transform: translateY(0);
+                opacity: 1;
+            }
+        }
+
+        .modal-header {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+            color: var(--danger);
+        }
+
+        .modal-header i {
+            font-size: 2.5rem;
+        }
+
+        .modal-header h2 {
+            font-size: 1.5rem;
+            margin: 0;
+        }
+
+        .modal-body {
+            margin-bottom: 2rem;
+            font-size: 1.1rem;
+        }
+
+        .modal-footer {
+            display: flex;
+            gap: 1rem;
+            justify-content: flex-end;
+        }
+
         @media (max-width: 768px) {
             .dashboard {
                 grid-template-columns: 1fr;
@@ -299,175 +423,149 @@
             .btn-group .btn {
                 width: 100%;
             }
+        }
 
-            .container {
-                padding: 1rem;
+        @media (min-width: 769px) and (max-width: 1200px) {
+            .dashboard {
+                grid-template-columns: repeat(2, 1fr);
             }
-        }
-
-        /* Toast Notification */
-        .toast {
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            background: white;
-            padding: 1rem 1.5rem;
-            border-radius: 8px;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
-            display: flex;
-            align-items: center;
-            gap: 1rem;
-            transform: translateX(120%);
-            transition: transform 0.3s ease;
-            z-index: 1000;
-            max-width: 350px;
-        }
-
-        .toast.show {
-            transform: translateX(0);
-        }
-
-        .toast i {
-            font-size: 1.5rem;
-        }
-
-        .toast.success i {
-            color: var(--success);
-        }
-
-        .toast.error i {
-            color: var(--danger);
-        }
-
-        .toast.warning i {
-            color: var(--warning);
-        }
-
-        .toast-content h4 {
-            margin-bottom: 0.3rem;
-            font-weight: 600;
-        }
-
-        .toast-content p {
-            font-size: 0.9rem;
-            color: var(--gray);
-            margin: 0;
-        }
-
-        /* Loading Spinner */
-        .spinner {
-            width: 20px;
-            height: 20px;
-            border: 3px solid rgba(255, 255, 255, 0.3);
-            border-radius: 50%;
-            border-top-color: white;
-            animation: spin 1s ease-in-out infinite;
-            display: inline-block;
-            margin-right: 8px;
-        }
-
-        @keyframes spin {
-            to { transform: rotate(360deg); }
         }
     </style>
 </head>
 <body>
     <div class="container">
         <header>
-            <h1><i class="fas fa-shield-alt"></i> Security Control Center</h1>
-            <p>Monitor and control your security system remotely</p>
+            <h1><i class="fas fa-shield-alt"></i> Smart Home Security System</h1>
+            <p>Monitor and control your security devices remotely</p>
+            <span id="connectionStatus" class="status-badge status-inactive">Connecting...</span>
         </header>
 
         <div class="dashboard">
-            <!-- System Status Card -->
             <div class="card">
                 <div class="card-header">
-                    <h2 class="card-title"><i class="fas fa-lock"></i> System Status</h2>
-                    <span id="securityStatusBadge" class="status-badge status-inactive">Disarmed</span>
+                    <h2 class="card-title"><i class="fas fa-cog"></i> Stepper Motor</h2>
+                    <span id="motorStatusBadge" class="status-badge status-inactive">OFF</span>
                 </div>
                 
                 <div class="status-indicator">
-                    <div id="securityIndicator" class="indicator off"></div>
-                    <div class="status-text" id="securityStatusText">Security system is currently disarmed</div>
+                    <div id="motorIndicator" class="indicator off"></div>
+                    <div class="status-text" id="motorStatusText">Motor is currently off</div>
                 </div>
 
                 <div class="btn-group">
-                    <button id="armBtn" class="btn btn-success">
-                        <i class="fas fa-lock"></i> Arm System
-                    </button>
-                    <button id="disarmBtn" class="btn btn-secondary" disabled>
-                        <i class="fas fa-lock-open"></i> Disarm
+                    <button id="motorBtn" class="btn btn-primary">
+                        <i class="fas fa-power-off"></i> Turn ON
                     </button>
                 </div>
             </div>
 
-            <!-- Alarm Status Card -->
             <div class="card warning">
                 <div class="card-header">
-                    <h2 class="card-title"><i class="fas fa-bell"></i> Alarm Status</h2>
-                    <span id="alarmStatusBadge" class="status-badge status-inactive">Inactive</span>
+                    <h2 class="card-title"><i class="fas fa-volume-up"></i> Alarm</h2>
+                    <span id="buzzerStatusBadge" class="status-badge status-inactive">OFF</span>
                 </div>
                 
                 <div class="status-indicator">
-                    <div id="alarmIndicator" class="indicator off"></div>
-                    <div class="status-text" id="alarmStatusText">Alarm is currently inactive</div>
+                    <div id="buzzerIndicator" class="indicator off"></div>
+                    <div class="status-text" id="buzzerStatusText">Alarm is currently off</div>
                 </div>
 
+                <div class="btn-group">
+                    <button id="buzzerBtn" class="btn btn-warning">
+                        <i class="fas fa-bell"></i> Turn ON
+                    </button>
+                </div>
+            </div>
+
+            <div class="card danger">
+                <div class="card-header">
+                    <h2 class="card-title"><i class="fas fa-bolt"></i>Electric Fence</h2>
+                    <span id="relayStatusBadge" class="status-badge status-inactive">OFF</span>
+                </div>
+                
+                <div class="status-indicator">
+                    <div id="relayIndicator" class="indicator off"></div>
+                    <div class="status-text" id="relayStatusText">Fence is currently off</div>
+                </div>
+
+                <div class="btn-group">
+                    <button id="relayBtn" class="btn btn-danger">
+                        <i class="fas fa-power-off"></i> Turn ON
+                    </button>
+                </div>
+            </div>
+
+            <div class="card success">
+                <div class="card-header">
+                    <h2 class="card-title"><i class="fas fa-running"></i> Motion Sensor</h2>
+                    <span id="motionStatusBadge" class="status-badge status-inactive">Clear</span>
+                </div>
+                
                 <div class="status-indicator">
                     <div id="motionIndicator" class="indicator off"></div>
                     <div class="status-text" id="motionStatusText">No motion detected</div>
                 </div>
             </div>
 
-            <!-- Electric Fence Card -->
-            <div class="card danger">
-                <div class="card-header">
-                    <h2 class="card-title"><i class="fas fa-bolt"></i> Electric Fence</h2>
-                    <span id="fenceStatusBadge" class="status-badge status-inactive">Inactive</span>
-                </div>
-                
-                <div class="status-indicator">
-                    <div id="fenceIndicator" class="indicator off"></div>
-                    <div class="status-text" id="fenceStatusText">Fence is currently inactive</div>
-                </div>
-
-                <div class="btn-group">
-                    <button id="fenceOnBtn" class="btn btn-danger">
-                        <i class="fas fa-power-off"></i> Activate
-                    </button>
-                    <button id="fenceOffBtn" class="btn btn-secondary" disabled>
-                        <i class="fas fa-power-off"></i> Deactivate
-                    </button>
-                </div>
-            </div>
-
-            <!-- Panic Button -->
             <div class="panic-container">
-                <button id="panicBtn" class="btn">
-                    <i class="fas fa-exclamation-triangle"></i> ACTIVATE HOMESECURE
+                <button id="stopAllBtn">
+                    <i class="fas fa-shield-alt"></i> START HOMESECURE
                 </button>
                 <p style="color: var(--gray); font-size: 0.9rem; margin-top: 0.5rem;">
-                    <i class="fas fa-info-circle"></i> Activates alarm and electric fence immediately
+                    <i class="fas fa-info-circle"></i> Activate or deactivate alarm and fence
                 </p>
+            </div>
+
+            <div class="card log-card">
+                <div class="card-header">
+                    <h2 class="card-title"><i class="fas fa-clipboard-list"></i> Event Log</h2>
+                    <button id="clearLogBtn" class="btn btn-secondary" style="padding: 0.5rem 1rem; font-size: 0.9rem;">
+                        <i class="fas fa-trash"></i> Clear
+                    </button>
+                </div>
+
+                <div class="table-wrapper">
+                    <table class="log-table">
+                        <thead>
+                            <tr>
+                                <th>Date & Time</th>
+                                <th>Event</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="logTableBody">
+                            <tr>
+                                <td colspan="3" style="text-align: center; color: var(--gray);">No events logged yet</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </div>
     </div>
 
-    <!-- Toast Notification -->
-    <div id="toast" class="toast">
-        <i class="fas fa-check-circle"></i>
-        <div class="toast-content">
-            <h4>Success</h4>
-            <p>Operation completed successfully</p>
+    <div id="motionModal" class="modal-overlay">
+        <div class="modal-content">
+            <div class="modal-header">
+                <i class="fas fa-exclamation-triangle"></i>
+                <h2>Motion Detected!</h2>
+            </div>
+            <div class="modal-body">
+                Motion has been detected by the PIR sensor. Do you want to activate HomeSecure?
+            </div>
+            <div class="modal-footer">
+                
+                <button id="confirmBtn" class="btn btn-danger">
+                    <i class="fas fa-bell"></i> Activate HomeSecure
+                </button>
+                <button id="cancelBtn" class="btn btn-secondary">
+                    <i class="fas fa-times"></i> Dismiss
+                </button>
+            </div>
         </div>
     </div>
 
-    <!-- Firebase and other scripts -->
-    <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-database-compat.js"></script>
-    
     <script>
-        // Firebase configuration
         const firebaseConfig = {
             apiKey: "AIzaSyCnHHJJXR56War7M4dMO_Cp577EKrwj9iM",
             authDomain: "home-83fb6.firebaseapp.com",
@@ -476,247 +574,267 @@
             storageBucket: "home-83fb6.firebasestorage.app",
             messagingSenderId: "513285854026",
             appId: "1:513285854026:web:e12215d6af0908274827b3",
-            measurementId: "G-LYWGGGRDN1"
+            measurementId: "G-LYWGGGRDN1",
         };
 
-        // Initialize Firebase
-        const app = firebase.initializeApp(firebaseConfig);
+        firebase.initializeApp(firebaseConfig);
         const database = firebase.database();
+        const motorRef = database.ref("motor/state");
+        const buzzerRef = database.ref("buzzer/state");
+        const relayRef = database.ref("relay/state");
+        const pirRef = database.ref("pir/status");
+        const deviceStatusRef = database.ref(".info/connected");
 
-        // DOM Elements
-        const toast = document.getElementById('toast');
-        const toastIcon = toast.querySelector('i');
-        const toastTitle = toast.querySelector('h4');
-        const toastMessage = toast.querySelector('p');
+        let modalShown = false;
+        let previousStates = {
+            motor: null,
+            buzzer: null,
+            relay: null,
+            motion: null
+        };
+        
+        let buzzerActive = false;
+        let relayActive = false;
+        let lastDataTimestamp = Date.now();
+        let connectionCheckInterval;
 
-        // Show toast notification
-        function showToast(type, title, message) {
-            toastIcon.className = 'fas ' + 
-                (type === 'success' ? 'fa-check-circle' : 
-                 type === 'error' ? 'fa-exclamation-circle' : 'fa-exclamation-triangle');
-            
-            toast.className = `toast ${type}`;
-            toastTitle.textContent = title;
-            toastMessage.textContent = message;
-            
-            toast.classList.add('show');
-            
-            setTimeout(() => {
-                toast.classList.remove('show');
+        function updateConnectionStatus(isConnected) {
+            const status = document.getElementById("connectionStatus");
+            if (isConnected) {
+                status.textContent = "Connected";
+                status.className = "status-badge status-active";
+            } else {
+                status.textContent = "Disconnected";
+                status.className = "status-badge status-inactive";
+            }
+        }
+
+        database.ref(".info/connected").on("value", (snapshot) => {
+            if (snapshot.val() === true) {
+                updateConnectionStatus(true);
+            } else {
+                updateConnectionStatus(false);
+            }
+        });
+
+        function startConnectionMonitoring() {
+            connectionCheckInterval = setInterval(() => {
+                const timeSinceLastData = Date.now() - lastDataTimestamp;
+                if (timeSinceLastData > 10000) {
+                    const status = document.getElementById("connectionStatus");
+                    status.textContent = "Connection Stale";
+                    status.className = "status-badge status-inactive";
+                }
             }, 5000);
         }
 
-        // System State
-        let systemState = {
-            isArmed: false,
-            isAlarmActive: false,
-            isFenceActive: false,
-            isPanicMode: false,
-            motionDetected: false
-        };
-
-        // Firebase References
-        const securityRef = database.ref('security');
-        const fenceRef = database.ref('fence/state');
-        const panicRef = database.ref('panic');
-
-        // Initialize UI
-        function updateUI() {
-            const { isArmed, isAlarmActive, isFenceActive, isPanicMode, motionDetected } = systemState;
+        function updateEmergencyButton() {
+            const btn = document.getElementById("stopAllBtn");
+            const anyActive = buzzerActive || relayActive;
             
-            // Update security status
-            document.getElementById('securityStatusBadge').textContent = isArmed ? 'Armed' : 'Disarmed';
-            document.getElementById('securityStatusBadge').className = `status-badge ${isArmed ? 'status-active' : 'status-inactive'}`;
-            document.getElementById('securityStatusText').textContent = 
-                `Security system is currently ${isArmed ? 'armed' : 'disarmed'}`;
-            document.getElementById('securityIndicator').className = `indicator ${isArmed ? 'on' : 'off'}`;
-            
-            // Update alarm status
-            document.getElementById('alarmStatusBadge').textContent = isAlarmActive ? 'Active' : 'Inactive';
-            document.getElementById('alarmStatusBadge').className = `status-badge ${isAlarmActive ? 'status-active' : 'status-inactive'}`;
-            document.getElementById('alarmStatusText').textContent = 
-                `Alarm is ${isAlarmActive ? 'ACTIVE!' : 'inactive'}`;
-            document.getElementById('alarmIndicator').className = `indicator ${isAlarmActive ? 'on' : 'off'}`;
-            
-            // Update motion status
-            document.getElementById('motionStatusText').textContent = 
-                motionDetected ? 'MOTION DETECTED!' : 'No motion detected';
-            document.getElementById('motionIndicator').className = `indicator ${motionDetected ? 'warning' : 'off'}`;
-            
-            // Update fence status
-            document.getElementById('fenceStatusBadge').textContent = isFenceActive ? 'Active' : 'Inactive';
-            document.getElementById('fenceStatusBadge').className = `status-badge ${isFenceActive ? 'status-active' : 'status-inactive'}`;
-            document.getElementById('fenceStatusText').textContent = 
-                `Fence is ${isFenceActive ? 'ACTIVE' : 'inactive'}`;
-            document.getElementById('fenceIndicator').className = `indicator ${isFenceActive ? 'on' : 'off'}`;
-            
-            // Update button states
-            document.getElementById('armBtn').disabled = isArmed;
-            document.getElementById('disarmBtn').disabled = !isArmed;
-            document.getElementById('fenceOnBtn').disabled = isFenceActive || isPanicMode;
-            document.getElementById('fenceOffBtn').disabled = !isFenceActive || isPanicMode;
-            
-            // Update panic button
-            const panicBtn = document.getElementById('panicBtn');
-            if (isPanicMode) {
-                panicBtn.innerHTML = '<i class="fas fa-exclamation-triangle"></i> PANIC MODE ACTIVE';
-                panicBtn.classList.add('panic-active');
-                panicBtn.disabled = true;
+            if (anyActive) {
+                btn.innerHTML = '<i class="fas fa-hand-paper"></i> EMERGENCY STOP ALL';
+                btn.style.background = 'linear-gradient(135deg, #ff4d4d, #ff1a1a)';
             } else {
-                panicBtn.innerHTML = '<i class="fas fa-exclamation-triangle"></i> ACTIVATE HOMESECURE';
-                panicBtn.classList.remove('panic-active');
-                panicBtn.disabled = false;
+                btn.innerHTML = '<i class="fas fa-shield-alt"></i> START HOMESECURE';
+                btn.style.background = 'linear-gradient(135deg, #06d6a0, #05b388)';
             }
         }
 
-        // Firebase Listeners
-        securityRef.on('value', (snapshot) => {
-            const data = snapshot.val() || {};
-            systemState.isArmed = data.armed || false;
-            systemState.isAlarmActive = data.alarm || false;
-            systemState.motionDetected = data.motionDetected || false;
-            updateUI();
-            
-            if (data.lastUpdated) {
-                showToast('success', 'Updated', 'Security status updated');
-            }
-        });
-
-        fenceRef.on('value', (snapshot) => {
-            systemState.isFenceActive = snapshot.val() || false;
-            updateUI();
-        });
-
-        panicRef.on('value', (snapshot) => {
-            systemState.isPanicMode = snapshot.val() || false;
-            updateUI();
-            
-            if (systemState.isPanicMode) {
-                showToast('error', 'PANIC MODE', 'Emergency systems activated!');
-            }
-        });
-
-        // Button Event Listeners
-        document.getElementById('armBtn').addEventListener('click', () => {
-            const btn = document.getElementById('armBtn');
-            const originalText = btn.innerHTML;
-            btn.innerHTML = '<span class="spinner"></span> Arming...';
-            btn.disabled = true;
-            
-            securityRef.update({ 
-                armed: true,
-                lastUpdated: Date.now()
-            }).then(() => {
-                showToast('success', 'System Armed', 'Security system is now armed');
-            }).catch((error) => {
-                console.error('Error arming system:', error);
-                showToast('error', 'Error', 'Failed to arm system');
-            }).finally(() => {
-                btn.innerHTML = originalText;
-                btn.disabled = systemState.isArmed;
-            });
-        });
-
-        document.getElementById('disarmBtn').addEventListener('click', () => {
-            const btn = document.getElementById('disarmBtn');
-            const originalText = btn.innerHTML;
-            btn.innerHTML = '<span class="spinner"></span> Disarming...';
-            btn.disabled = true;
-            
-            Promise.all([
-                securityRef.update({ 
-                    armed: false,
-                    alarm: false,
-                    motionDetected: false,
-                    lastUpdated: Date.now()
-                }),
-                fenceRef.set(false),
-                panicRef.set(false)
-            ]).then(() => {
-                showToast('success', 'System Disarmed', 'Security system is now disarmed');
-            }).catch((error) => {
-                console.error('Error disarming system:', error);
-                showToast('error', 'Error', 'Failed to disarm system');
-            }).finally(() => {
-                btn.innerHTML = originalText;
-                btn.disabled = !systemState.isArmed;
-            });
-        });
-
-        document.getElementById('fenceOnBtn').addEventListener('click', () => {
-            const btn = document.getElementById('fenceOnBtn');
-            const originalText = btn.innerHTML;
-            btn.innerHTML = '<span class="spinner"></span> Activating...';
-            btn.disabled = true;
-            
-            fenceRef.set(true).then(() => {
-                showToast('success', 'Fence Activated', 'Electric fence is now active');
-            }).catch((error) => {
-                console.error('Error activating fence:', error);
-                showToast('error', 'Error', 'Failed to activate fence');
-            }).finally(() => {
-                btn.innerHTML = originalText;
-                btn.disabled = systemState.isFenceActive;
-            });
-        });
-
-        document.getElementById('fenceOffBtn').addEventListener('click', () => {
-            const btn = document.getElementById('fenceOffBtn');
-            const originalText = btn.innerHTML;
-            btn.innerHTML = '<span class="spinner"></span> Deactivating...';
-            btn.disabled = true;
-            
-            fenceRef.set(false).then(() => {
-                showToast('success', 'Fence Deactivated', 'Electric fence is now inactive');
-            }).catch((error) => {
-                console.error('Error deactivating fence:', error);
-                showToast('error', 'Error', 'Failed to deactivate fence');
-            }).finally(() => {
-                btn.innerHTML = originalText;
-                btn.disabled = !systemState.isFenceActive;
-            });
-        });
-
-        document.getElementById('panicBtn').addEventListener('click', () => {
-            if (confirm('⚠️ WARNING: This will activate the alarm and electric fence immediately!\n\nAre you sure you want to activate panic mode?')) {
-                const btn = document.getElementById('panicBtn');
-                const originalText = btn.innerHTML;
-                btn.innerHTML = '<span class="spinner"></span> ACTIVATING...';
-                btn.disabled = true;
+        function loadLogHistory() {
+            const savedLogs = localStorage.getItem('deviceLogs');
+            if (savedLogs) {
+                const logs = JSON.parse(savedLogs);
+                const logTableBody = document.getElementById("logTableBody");
                 
-                Promise.all([
-                    panicRef.set(true),
-                    securityRef.update({ 
-                        armed: true,
-                        alarm: true,
-                        motionDetected: true,
-                        lastUpdated: Date.now()
-                    }),
-                    fenceRef.set(true)
-                ]).then(() => {
-                    showToast('error', 'PANIC MODE ACTIVATED', 'Alarm and electric fence are now active!');
-                }).catch((error) => {
-                    console.error('Error activating panic mode:', error);
-                    showToast('error', 'Error', 'Failed to activate panic mode');
-                }).finally(() => {
-                    btn.innerHTML = originalText;
-                });
+                if (logs.length > 0) {
+                    logTableBody.innerHTML = '';
+                    logs.forEach(log => {
+                        const row = document.createElement('tr');
+                        row.innerHTML = `
+                            <td>${log.dateTime}</td>
+                            <td class="${log.eventClass}">${log.event}</td>
+                            <td>${log.status}</td>
+                        `;
+                        logTableBody.appendChild(row);
+                    });
+                }
+            }
+        }
+
+        function saveLogHistory() {
+            const logTableBody = document.getElementById("logTableBody");
+            const rows = logTableBody.querySelectorAll('tr');
+            const logs = [];
+            
+            rows.forEach(row => {
+                const cells = row.querySelectorAll('td');
+                if (cells.length === 3 && !cells[0].hasAttribute('colspan')) {
+                    logs.push({
+                        dateTime: cells[0].textContent,
+                        event: cells[1].textContent,
+                        eventClass: cells[1].className,
+                        status: cells[2].textContent
+                    });
+                }
+            });
+            
+            localStorage.setItem('deviceLogs', JSON.stringify(logs));
+        }
+
+        function addLog(event, status, eventClass) {
+            const now = new Date();
+            const dateTime = now.toLocaleString();
+            const logTableBody = document.getElementById("logTableBody");
+            
+            const noEventsRow = logTableBody.querySelector('td[colspan="3"]');
+            if (noEventsRow) {
+                logTableBody.innerHTML = '';
+            }
+            
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td>${dateTime}</td>
+                <td class="${eventClass}">${event}</td>
+                <td>${status}</td>
+            `;
+            
+            logTableBody.insertBefore(row, logTableBody.firstChild);
+            saveLogHistory();
+        }
+
+        function updateDeviceUI(device, isOn) {
+            const badge = document.getElementById(`${device}StatusBadge`);
+            const indicator = document.getElementById(`${device}Indicator`);
+            const text = document.getElementById(`${device}StatusText`);
+            
+            badge.textContent = isOn ? "ON" : "OFF";
+            badge.className = isOn ? "status-badge status-active" : "status-badge status-inactive";
+            indicator.className = isOn ? "indicator on" : "indicator off";
+            text.textContent = `${device.charAt(0).toUpperCase() + device.slice(1)} is currently ${isOn ? "on" : "off"}`;
+            
+            if (device === "motor") {
+                const btn = document.getElementById("motorBtn");
+                btn.innerHTML = isOn ? '<i class="fas fa-power-off"></i> Turn OFF' : '<i class="fas fa-power-off"></i> Turn ON';
+                btn.className = isOn ? "btn btn-danger" : "btn btn-primary";
+            } else if (device === "buzzer") {
+                const btn = document.getElementById("buzzerBtn");
+                btn.innerHTML = isOn ? '<i class="fas fa-bell-slash"></i> Turn OFF' : '<i class="fas fa-bell"></i> Turn ON';
+                btn.className = isOn ? "btn btn-danger" : "btn btn-warning";
+            } else if (device === "relay") {
+                const btn = document.getElementById("relayBtn");
+                btn.innerHTML = isOn ? '<i class="fas fa-power-off"></i> Turn OFF' : '<i class="fas fa-power-off"></i> Turn ON';
+                btn.className = isOn ? "btn btn-secondary" : "btn btn-danger";
+            }
+        }
+
+        motorRef.on("value", (snapshot) => {
+            const isOn = snapshot.val() === "on";
+            lastDataTimestamp = Date.now();
+            updateDeviceUI("motor", isOn);
+            
+            if (previousStates.motor !== null && previousStates.motor !== isOn) {
+                addLog("Stepper Motor", isOn ? "ON" : "OFF", "event-motor");
+            }
+            previousStates.motor = isOn;
+        });
+
+        document.getElementById("motorBtn").addEventListener("click", () => {
+            motorRef.transaction((state) => state === "on" ? "off" : "on");
+        });
+
+        buzzerRef.on("value", (snapshot) => {
+            const isOn = snapshot.val() === "on";
+            lastDataTimestamp = Date.now();
+            buzzerActive = isOn;
+            updateDeviceUI("buzzer", isOn);
+            updateEmergencyButton();
+            
+            if (previousStates.buzzer !== null && previousStates.buzzer !== isOn) {
+                addLog("Alarm", isOn ? "ON" : "OFF", "event-buzzer");
+            }
+            previousStates.buzzer = isOn;
+        });
+
+        document.getElementById("buzzerBtn").addEventListener("click", () => {
+            buzzerRef.transaction((state) => state === "on" ? "off" : "on");
+        });
+
+        relayRef.on("value", (snapshot) => {
+            const isOn = snapshot.val() === "on";
+            lastDataTimestamp = Date.now();
+            relayActive = isOn;
+            updateDeviceUI("relay", isOn);
+            updateEmergencyButton();
+            
+            if (previousStates.relay !== null && previousStates.relay !== isOn) {
+                addLog("Electric Fence", isOn ? "ON" : "OFF", "event-relay");
+            }
+            previousStates.relay = isOn;
+        });
+
+        document.getElementById("relayBtn").addEventListener("click", () => {
+            relayRef.transaction((state) => state === "on" ? "off" : "on");
+        });
+
+        pirRef.on("value", (snapshot) => {
+            const status = snapshot.val();
+            lastDataTimestamp = Date.now();
+            const detected = status === "detected";
+            
+            const badge = document.getElementById("motionStatusBadge");
+            const indicator = document.getElementById("motionIndicator");
+            const text = document.getElementById("motionStatusText");
+            
+            badge.textContent = detected ? "DETECTED" : "Clear";
+            badge.className = detected ? "status-badge status-active" : "status-badge status-inactive";
+            indicator.className = detected ? "indicator warning" : "indicator off";
+            text.textContent = detected ? "⚠️ Motion detected!" : "No motion detected";
+            
+            if (detected && !modalShown) {
+                document.getElementById("motionModal").classList.add("show");
+                modalShown = true;
+                addLog("Motion Sensor", "Motion Detected", "event-motion");
+            } else if (!detected && modalShown) {
+                modalShown = false;
+                addLog("Motion Sensor", "Motion Cleared", "event-motion");
             }
         });
 
-        // Check connection status
-        database.ref('.info/connected').on('value', (snapshot) => {
-            const isConnected = snapshot.val();
-            if (isConnected) {
-                console.log('Connected to Firebase');
+        document.getElementById("confirmBtn").addEventListener("click", () => {
+            buzzerRef.set("on");
+            relayRef.set("on");
+            document.getElementById("motionModal").classList.remove("show");
+            addLog("Alarm System", "Activated (Buzzer + Relay)", "event-alarm");
+        });
+
+        document.getElementById("cancelBtn").addEventListener("click", () => {
+            document.getElementById("motionModal").classList.remove("show");
+        });
+
+        document.getElementById("stopAllBtn").addEventListener("click", () => {
+            const anyActive = buzzerActive || relayActive;
+            
+            if (anyActive) {
+                buzzerRef.set("off");
+                relayRef.set("off");
+                addLog("Emergency Stop", "All Systems Stopped", "event-alarm");
             } else {
-                console.log('Disconnected from Firebase');
-                showToast('warning', 'Connection Lost', 'Trying to reconnect...');
+                
+                buzzerRef.set("on");
+                relayRef.set("on");
+                addLog("HomeSecurity", "System Activated (Buzzer + Relay)", "event-all");
             }
         });
 
-        // Initial UI update
-        updateUI();
+        document.getElementById("clearLogBtn").addEventListener("click", () => {
+            document.getElementById("logTableBody").innerHTML = '<tr><td colspan="3" style="text-align: center; color: var(--gray);">No events logged yet</td></tr>';
+            localStorage.removeItem('deviceLogs');
+        });
+
+        loadLogHistory();
+        startConnectionMonitoring();
+        updateConnectionStatus(false);
     </script>
 </body>
 </html>
